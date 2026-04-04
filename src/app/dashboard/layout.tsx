@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-// 👇 Importamos o 'X' para o botão de fechar do mobile
-import { Ribbon, User, Menu, X } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+// 👇 Importamos o LogOut para o botão de sair
+import { Ribbon, Menu, X, LogOut } from 'lucide-react'
 import PageTransition from '@/components/PageTransition'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -11,28 +11,37 @@ import Footer from '@/components/Footer'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   
-  // Estados
-  const [userRole, setUserRole] = useState<string | null>(null)
-  const [isLoadingRole, setIsLoadingRole] = useState(true)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false) // 👇 Estado do menu mobile
+  // Estados simplificados: apenas verificamos se alguém está logado
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   useEffect(() => {
-    const buscarRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', user.id)
-          .single()
-        
-        if (data) setUserRole(data.role)
-      }
-      setIsLoadingRole(false) 
+    // 1. Verifica no momento em que a página carrega
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setIsAuthenticated(!!session)
+      setIsLoadingAuth(false) 
     }
-    buscarRole()
+    checkAuth()
+
+    // 2. "Escuta" em tempo real: se o médico fizer login, a barra atualiza na hora!
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      setIsAuthenticated(!!session)
+    })
+
+    return () => {
+      authListener.subscription.unsubscribe()
+    }
   }, [])
+
+  // Função para o médico sair da conta
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/')
+  }
 
   return (
     <div className="min-h-screen flex flex-col antialiased">
@@ -50,7 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
 
           {/* NAVEGAÇÃO DESKTOP */}
-          <nav className="hidden lg:flex space-x-1">
+          <nav className="hidden lg:flex items-center space-x-1">
             <Link 
               href="/dashboard" 
               className={`px-4 py-2 rounded-lg font-medium transition-all ${
@@ -73,11 +82,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Agendar
             </Link>
 
-            {/* BOTÃO RESTRITO COM PREVENÇÃO DE PULO (SKELETON) */}
-            {isLoadingRole ? (
-              <div className="w-32 h-10 bg-gray-100/50 animate-pulse rounded-lg mt-0.5"></div>
+            {/* 👇 BOTÃO RESTRITO PARA MÉDICOS (Aparece se estiver logado) */}
+            {isLoadingAuth ? (
+              <div className="w-24 h-10 bg-gray-100/50 animate-pulse rounded-lg mt-0.5"></div>
             ) : (
-              (userRole === 'admin' || userRole === 'medico') && (
+              isAuthenticated && (
                 <Link 
                   href="/dashboard/consultas" 
                   className={`px-4 py-2 rounded-lg font-medium transition-all ${
@@ -86,23 +95,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     : 'text-gray-600 hover:text-primary hover:bg-primary/5'
                   }`}
                 >
-                  Painel Médico
+                  Consultas
                 </Link>
               )
             )}
           </nav>
 
-          {/* BOTÕES DE AÇÃO */}
+          {/* BOTÕES DE AÇÃO (DIREITA) */}
           <div className="flex items-center gap-4">
-            <Link 
-              href="/login" 
-              className="hidden sm:flex items-center gap-2 border-2 border-gray-100 text-textBase hover:border-primary hover:text-primary font-semibold py-2 px-5 rounded-xl transition-all duration-300"
-            >
-              <User size={18} /> 
-              <span>Login</span>
-            </Link>
             
-            {/* 👇 MENU MOBILE: Botão de abrir */}
+            {/* 👇 BOTÃO DE SAIR (Apenas visível se o médico estiver logado) */}
+            {!isLoadingAuth && isAuthenticated && (
+              <button 
+                onClick={handleLogout}
+                className="hidden lg:flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-lg hover:bg-red-50"
+              >
+                <LogOut size={18} /> Sair
+              </button>
+            )}
+            
+            {/* MENU MOBILE: Botão de abrir */}
             <button 
               onClick={() => setIsMobileMenuOpen(true)}
               className="lg:hidden text-gray-600 hover:text-primary p-2"
@@ -113,7 +125,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </header>
 
-      {/* 👇 OVERLAY DO MENU MOBILE */}
+      {/* OVERLAY DO MENU MOBILE */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[60] bg-white lg:hidden flex flex-col">
           {/* Cabeçalho do Mobile */}
@@ -160,30 +172,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Agendar
             </Link>
 
-            {!isLoadingRole && (userRole === 'admin' || userRole === 'medico') && (
-              <Link 
-                href="/dashboard/consultas" 
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`p-4 rounded-xl font-medium transition-all ${
-                  pathname.startsWith('/dashboard/consultas') 
-                  ? 'text-primary bg-primary/5 font-semibold' 
-                  : 'text-gray-600 active:bg-gray-50'
-                }`}
-              >
-                Painel Médico
-              </Link>
+            {/* 👇 MENU MOBILE DO MÉDICO */}
+            {!isLoadingAuth && isAuthenticated && (
+              <>
+                <Link 
+                  href="/dashboard/consultas" 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`p-4 rounded-xl font-medium transition-all ${
+                    pathname.startsWith('/dashboard/consultas') 
+                    ? 'text-primary bg-primary/5 font-semibold' 
+                    : 'text-gray-600 active:bg-gray-50'
+                  }`}
+                >
+                  Consultas
+                </Link>
+
+                <hr className="my-4 border-gray-100" />
+                
+                <button 
+                  onClick={() => { setIsMobileMenuOpen(false); handleLogout(); }}
+                  className="flex items-center gap-2 p-4 rounded-xl font-medium text-red-600 active:bg-red-50 text-left"
+                >
+                  <LogOut size={20} /> Sair da Conta
+                </button>
+              </>
             )}
-
-            <hr className="my-4 border-gray-100" />
-
-            <Link 
-              href="/login" 
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="flex items-center justify-center gap-2 bg-primary text-white font-semibold py-4 px-5 rounded-xl transition-all"
-            >
-              <User size={18} /> 
-              <span>Fazer Login</span>
-            </Link>
           </nav>
         </div>
       )}

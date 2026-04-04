@@ -40,23 +40,26 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isDashboardRoot = request.nextUrl.pathname === '/dashboard'
-  const isInsideDashboard = request.nextUrl.pathname.startsWith('/dashboard/')
+  // 👇 NOVA REGRA: Quais páginas devem ser trancadas? 
+  // No nosso novo modelo, APENAS a rota de consultas do médico exige login.
+  const isMedicoRoute = request.nextUrl.pathname.startsWith('/dashboard/consultas')
 
+  // Se NÃO tem usuário logado E tentou acessar uma página exclusiva de médico
+  if (!user && isMedicoRoute) {
+    const requestedPage = request.nextUrl.pathname
+    
+    // 👇 Mudamos a rota de redirecionamento de '/login' para a nossa porta secreta '/medico'
+    const loginUrl = new URL('/medico', request.url)
+    loginUrl.searchParams.set('next', requestedPage)
+    
+    return NextResponse.redirect(loginUrl)
+  }
 
-  if (!user && isInsideDashboard && !isDashboardRoot) {
-  // Pegamos a página que o usuário tentou acessar (ex: /dashboard/agendamento)
-  const requestedPage = request.nextUrl.pathname
-  
-  // Criamos a URL de login com o parâmetro ?next=/dashboard/agendamento
-  const loginUrl = new URL('/login', request.url)
-  loginUrl.searchParams.set('next', requestedPage)
-  
-  return NextResponse.redirect(loginUrl)
+  // IMPORTANTE: precisamos garantir que sempre retornamos a response no final
+  return response
 }
 
-}
 export const config = {
-  // Mantemos o matcher vigiando tudo sob /dashboard
+  // Mantemos o matcher vigiando o dashboard inteiro
   matcher: ['/dashboard/:path*'],
 }
