@@ -25,6 +25,8 @@ const MESES = [
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
 ]
 
+
+
 // ─── Paleta rosa ────────────────────────────────────────────────
 const C = {
   pink50:  '#FDF0F7',
@@ -39,6 +41,17 @@ const C = {
   gray400: '#A1A1AA',
   gray600: '#52525B',
   gray800: '#18181B',
+}
+
+const formatarTelefone = (value: string) => {
+  if (!value) return ""
+  // Remove tudo o que não é dígito
+  value = value.replace(/\D/g, "")
+  // (00) 00000-0000
+  value = value.replace(/^(\d{2})(\d)/g, "($1) $2")
+  value = value.replace(/(\d{5})(\d)/, "$1-$2")
+  // Limita a 11 dígitos (DDD + 9 números)
+  return value.substring(0, 15)
 }
 
 // ─── Helpers de estilo ─────────────────────────────────────────
@@ -69,11 +82,30 @@ export default function AgendamentoPage() {
     setToast({ message, type, id: Date.now() })
   }
 
+  const [isAuthUser, setIsAuthUser] = useState(false)
+  
+  useEffect(() => {
+    const verificarSessao = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setIsAuthUser(!!session) // Fica true se o médico estiver logado
+    }
+
+    verificarSessao()
+
+    // Escuta mudanças (caso o médico faça login/logout na mesma aba)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthUser(!!session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+  // 👆 FIM DO BLOCO NOVO
+
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 4000)
     return () => clearTimeout(t)
-  }, [toast])
+  }, [toast]) 
 
   // Confirmação
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false)
@@ -213,10 +245,21 @@ export default function AgendamentoPage() {
       }])
       if (ea) throw ea
 
+      // 🔥 CORREÇÃO AQUI: Verifica a sessão em TEMPO REAL ignorando o state do React
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        // Só salva o token se a sessão for NULA (ou seja, é um paciente comum agendando de casa)
+        localStorage.setItem('meu_token_paciente', cpfLimpo) 
+      }
+
+      // Restante da sua lógica original de sucesso...
       setProtocolo(`#AGD-${Math.floor(Math.random() * 9000) + 1000}`)
       setMostrarConfirmacao(true)
-    } catch (error: any) {
-      showToast(`Erro técnico: ${error.message}`, 'error')
+
+    } catch (error) {
+      showToast('Ocorreu um erro ao salvar o agendamento. Tente novamente.', 'error')
+      console.error(error)
     } finally {
       setLoading(false)
     }
@@ -441,8 +484,16 @@ export default function AgendamentoPage() {
                       placeholder="Nome conforme documento"
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                       style={{ borderColor: C.gray200 }}
-                      onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
-                      onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
+                      Nome Social
+                    </label>
+                    <input type="text" value={nomeSocial} onChange={e => setNomeSocial(e.target.value)}
+                      placeholder="Como prefere ser chamado"
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
+                      style={{ borderColor: C.gray200 }}
                     />
                   </div>
                   <div>
@@ -452,8 +503,16 @@ export default function AgendamentoPage() {
                     <input type="date" required max={new Date().toISOString().split('T')[0]} value={dataNascimento} onChange={e => setDataNascimento(e.target.value)}
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all text-gray-700"
                       style={{ borderColor: C.gray200 }}
-                      onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
-                      onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
+                      Nacionalidade
+                    </label>
+                    <input type="text" value={nacionalidade} onChange={e => setNacionalidade(e.target.value)}
+                      placeholder="Ex: Brasileira"
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
+                      style={{ borderColor: C.gray200 }}
                     />
                   </div>
                   <div className="md:col-span-3">
@@ -464,13 +523,57 @@ export default function AgendamentoPage() {
                       placeholder="000 0000 0000 0000"
                       className="w-full md:w-1/2 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all font-mono"
                       style={{ borderColor: C.gray200 }}
-                      onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
-                      onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
                     />
                   </div>
                 </div>
 
-                {/* Divisória */}
+                {/* Identidade e Orientação */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>Identidade de Gênero</label>
+                    <input type="text" value={identidadeGenero} onChange={e => setIdentidadeGenero(e.target.value)}
+                      placeholder="Ex: Mulher Cis, Homem Trans..."
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none" style={{ borderColor: C.gray200 }}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>Orientação Sexual</label>
+                    <input type="text" value={orientacaoSexual} onChange={e => setOrientacaoSexual(e.target.value)}
+                      placeholder="Ex: Heterossexual, Lésbica..."
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none" style={{ borderColor: C.gray200 }}
+                    />
+                  </div>
+                </div>
+
+                {/* Filiação */}
+                <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: C.gray400 }}>Filiação</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="text-xs font-semibold" style={{ color: C.gray600 }}>Nome da Mãe</label>
+                      <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                        <input type="checkbox" checked={motherNotDeclared} onChange={e => setMotherNotDeclared(e.target.checked)} className="rounded text-pink-600" />
+                        Não declarado
+                      </label>
+                    </div>
+                    <input type="text" disabled={motherNotDeclared} value={motherNotDeclared ? '' : nomeMae} onChange={e => setNomeMae(e.target.value)}
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none disabled:bg-gray-50 opacity-100" style={{ borderColor: C.gray200 }}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="text-xs font-semibold" style={{ color: C.gray600 }}>Nome do Pai</label>
+                      <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                        <input type="checkbox" checked={fatherNotDeclared} onChange={e => setFatherNotDeclared(e.target.checked)} className="rounded text-pink-600" />
+                        Não declarado
+                      </label>
+                    </div>
+                    <input type="text" disabled={fatherNotDeclared} value={fatherNotDeclared ? '' : nomePai} onChange={e => setNomePai(e.target.value)}
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none disabled:bg-gray-50" style={{ borderColor: C.gray200 }}
+                    />
+                  </div>
+                </div>
+
                 <div className="border-t border-gray-100 mb-5" />
 
                 {/* Contato e endereço */}
@@ -478,22 +581,22 @@ export default function AgendamentoPage() {
                   Contato e endereço
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Campo genérico helper */}
-                  {[
-                    { label: 'Telefone', required: true, value: telefone, onChange: setTelefone, type: 'tel', placeholder: '(00) 00000-0000' },
-                  ].map(f => (
-                    <div key={f.label}>
-                      <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
-                        {f.label} {f.required && <span style={{ color: C.pink600 }}>*</span>}
-                      </label>
-                      <input type={f.type} value={f.value} onChange={e => f.onChange(e.target.value)} placeholder={f.placeholder}
-                        className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
-                        style={{ borderColor: C.gray200 }}
-                        onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
-                        onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
-                      />
-                    </div>
-                  ))}
+                  <div>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
+                      Telefone <span style={{ color: C.pink600 }}>*</span>
+                    </label>
+                    <input 
+                      type="tel" 
+                      required 
+                      value={telefone} 
+                      onChange={e => setTelefone(formatarTelefone(e.target.value))} 
+                      placeholder="(00) 00000-0000"
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
+                      style={{ borderColor: C.gray200 }}
+                      onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
+                      onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
+                    />
+                  </div>
                   <div>
                     <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
                       CEP {loadingCep && <Loader2 size={11} className="inline animate-spin ml-1" />} <span style={{ color: C.pink600 }}>*</span>
@@ -501,8 +604,6 @@ export default function AgendamentoPage() {
                     <input type="text" required maxLength={9} value={cep} onChange={handleCepChange} placeholder="00000-000"
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                       style={{ borderColor: C.gray200 }}
-                      onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
-                      onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -513,31 +614,36 @@ export default function AgendamentoPage() {
                       <input type="text" required value={rua} onChange={e => setRua(e.target.value)} placeholder="Logradouro"
                         className="flex-1 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                         style={{ borderColor: C.gray200 }}
-                        onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
-                        onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
                       />
                       <input type="text" required value={numero} onChange={e => setNumero(e.target.value)} placeholder="Nº"
                         className="w-20 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all text-center"
                         style={{ borderColor: C.gray200 }}
-                        onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
-                        onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
                       />
                     </div>
                   </div>
                   <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
+                      Complemento
+                    </label>
+                    <input type="text" value={complemento} onChange={e => setComplemento(e.target.value)} placeholder="Apto, Bloco, Casa..."
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none"
+                      style={{ borderColor: C.gray200 }}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
                     <div className="flex gap-2">
-                      {[
-                        { value: bairro,  onChange: setBairro,  placeholder: 'Bairro',  cls: 'flex-1' },
-                        { value: cidade,  onChange: setCidade,  placeholder: 'Cidade',  cls: 'flex-1' },
-                        { value: uf,      onChange: (v: string) => setUf(v.toUpperCase()), placeholder: 'UF', cls: 'w-16' },
-                      ].map(f => (
-                        <input key={f.placeholder} type="text" required value={f.value} onChange={e => f.onChange(e.target.value)} placeholder={f.placeholder}
-                          className={`${f.cls} px-3 py-2.5 border rounded-xl text-sm outline-none transition-all uppercase`}
-                          style={{ borderColor: C.gray200 }}
-                          onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
-                          onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}
-                        />
-                      ))}
+                      <input type="text" required value={bairro} onChange={e => setBairro(e.target.value)} placeholder="Bairro"
+                        className="flex-1 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
+                        style={{ borderColor: C.gray200 }}
+                      />
+                      <input type="text" required value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade"
+                        className="flex-1 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
+                        style={{ borderColor: C.gray200 }}
+                      />
+                      <input type="text" required value={uf} onChange={e => setUf(e.target.value.toUpperCase())} placeholder="UF"
+                        className="w-16 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all text-center uppercase"
+                        style={{ borderColor: C.gray200 }}
+                      />
                     </div>
                   </div>
                 </div>

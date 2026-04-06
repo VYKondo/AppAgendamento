@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-// 👇 Importamos o LogOut para o botão de sair
 import { Ribbon, Menu, X, LogOut } from 'lucide-react'
 import PageTransition from '@/components/PageTransition'
 import { useEffect, useState } from 'react'
@@ -13,10 +12,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const router = useRouter()
   
-  // Estados simplificados: apenas verificamos se alguém está logado
+  // Estados de autenticação
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  
+  // 👇 NOVO: Estado para saber se há um paciente "logado" via localStorage
+  const [hasPatientToken, setHasPatientToken] = useState(false)
 
   useEffect(() => {
     // 1. Verifica no momento em que a página carrega
@@ -37,10 +39,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [])
 
+  // 👇 NOVO: Verifica se o paciente tem um token salvo toda vez que a rota mudar
+  useEffect(() => {
+    const token = localStorage.getItem('meu_token_paciente')
+    setHasPatientToken(!!token)
+  }, [pathname])
+
   // Função para o médico sair da conta
   const handleLogout = async () => {
     await supabase.auth.signOut()
+    // Por garantia, limpa também o token do paciente caso algo tenha ficado preso
+    localStorage.removeItem('meu_token_paciente')
+    setHasPatientToken(false)
     router.push('/')
+  }
+
+  // 👇 NOVO: Função exclusiva para o PACIENTE limpar seu CPF
+  const handleSairPaciente = () => {
+    localStorage.removeItem('meu_token_paciente')
+    setHasPatientToken(false)
+    router.push('/') // Joga para a home após limpar
   }
 
   return (
@@ -81,8 +99,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               Agendar
             </Link>
-
-            {/* 👇 BOTÃO RESTRITO PARA MÉDICOS (Aparece se estiver logado) */}
+              
+            {/* BOTÃO RESTRITO PARA PACIENTES */}
+            {!isLoadingAuth && !isAuthenticated && (
+              <Link 
+                href="/dashboard/meu_agendamento" 
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  pathname.startsWith('/dashboard/meu_agendamento') 
+                  ? 'text-primary bg-primary/5 font-semibold' 
+                  : 'text-gray-600 hover:text-primary hover:bg-primary/5'
+                }`}
+              >
+                Meu agendamento
+              </Link>
+            )}
+              
+            {/* BOTÃO RESTRITO PARA MÉDICOS */}
             {isLoadingAuth ? (
               <div className="w-24 h-10 bg-gray-100/50 animate-pulse rounded-lg mt-0.5"></div>
             ) : (
@@ -104,11 +136,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* BOTÕES DE AÇÃO (DIREITA) */}
           <div className="flex items-center gap-4">
             
-            {/* 👇 BOTÃO DE SAIR (Apenas visível se o médico estiver logado) */}
+            {/* BOTÃO DE SAIR - MÉDICO */}
             {!isLoadingAuth && isAuthenticated && (
               <button 
                 onClick={handleLogout}
                 className="hidden lg:flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-lg hover:bg-red-50"
+              >
+                <LogOut size={18} /> Sair
+              </button>
+            )}
+
+            {/* 👇 NOVO: BOTÃO DE SAIR - PACIENTE (Aparece se não for médico e tiver token) */}
+            {!isLoadingAuth && !isAuthenticated && hasPatientToken && (
+              <button 
+                onClick={handleSairPaciente}
+                className="hidden lg:flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-red-600 transition-colors px-3 py-2 rounded-lg hover:bg-red-50"
+                title="Limpar meus dados do dispositivo"
               >
                 <LogOut size={18} /> Sair
               </button>
@@ -172,7 +215,35 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Agendar
             </Link>
 
-            {/* 👇 MENU MOBILE DO MÉDICO */}
+            {/* LINK NO MOBILE RESTRITO PARA PACIENTES */}
+            {!isLoadingAuth && !isAuthenticated && (
+              <Link 
+                href="/dashboard/meu_agendamento" 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`p-4 rounded-xl font-medium transition-all ${
+                  pathname.startsWith('/dashboard/meu_agendamento') 
+                  ? 'text-primary bg-primary/5 font-semibold' 
+                  : 'text-gray-600 active:bg-gray-50'
+                }`}
+              >
+                Meu agendamento
+              </Link>
+            )}
+
+            {/* 👇 NOVO: BOTÃO SAIR MOBILE - PACIENTE */}
+            {!isLoadingAuth && !isAuthenticated && hasPatientToken && (
+              <>
+                <hr className="my-4 border-gray-100" />
+                <button 
+                  onClick={() => { setIsMobileMenuOpen(false); handleSairPaciente(); }}
+                  className="flex items-center gap-2 p-4 rounded-xl font-medium text-red-600 active:bg-red-50 text-left"
+                >
+                  <LogOut size={20} /> Sair da conta
+                </button>
+              </>
+            )}
+
+            {/* MENU MOBILE DO MÉDICO */}
             {!isLoadingAuth && isAuthenticated && (
               <>
                 <Link 
@@ -193,7 +264,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   onClick={() => { setIsMobileMenuOpen(false); handleLogout(); }}
                   className="flex items-center gap-2 p-4 rounded-xl font-medium text-red-600 active:bg-red-50 text-left"
                 >
-                  <LogOut size={20} /> Sair da Conta
+                  <LogOut size={20} /> Sair do Sistema
                 </button>
               </>
             )}
