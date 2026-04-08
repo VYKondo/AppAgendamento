@@ -61,3 +61,6 @@
     border-color: var(--color-primary); background-color: #fdf2f6;
     color: var(--color-primary); font-weight: bold;
   }
+  html {
+  scroll-behavior: smooth;
+}

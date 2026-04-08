@@ -81,7 +81,7 @@ export default function AtualizarSenha() {
       
       await supabase.auth.signOut()
       setTimeout(() => {
-        router.push('/login')
+        router.push('medico')
       }, 3000)
     }
   }

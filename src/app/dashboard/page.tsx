@@ -129,12 +129,15 @@ export default function DashboardHome() {
               >
                 Agendar Consulta <ArrowRight size={16} />
               </Link>
-              <button
-                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold border font-heading transition-all duration-200 hover:border-pink-300 hover:-translate-y-0.5"
+              
+              {/* 👇 CORREÇÃO: Trocamos <button> por <a> e usamos href="#como-funciona" */}
+              <a
+                href="#como-funciona"
+                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold border font-heading transition-all duration-200 hover:border-pink-300 hover:-translate-y-0.5 cursor-pointer"
                 style={{ borderColor: C.gray200, color: C.gray600, background: '#fff' }}
               >
                 <PlayCircle size={16} style={{ color: C.pink400 }} /> Como funciona
-              </button>
+              </a>
             </div>
 
             {/* Mini-stats inline */}
@@ -250,7 +253,8 @@ export default function DashboardHome() {
       </div>
 
       {/* ══ COMO FUNCIONA ══ */}
-      <div
+      <div 
+        id = "como-funciona"
         className="relative rounded-3xl overflow-hidden px-8 py-12 md:px-14"
         style={{ background: `linear-gradient(135deg, ${C.pink800} 0%, ${C.pink600} 100%)` }}
       >
