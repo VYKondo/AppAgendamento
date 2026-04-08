@@ -129,8 +129,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 >
                   Consultas
                 </Link>
+                
               )
             )}
+            <Link 
+              href="/dashboard/horarios" 
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                pathname.startsWith('/dashboard/horarios') 
+                ? 'text-primary bg-primary/5 font-semibold' 
+                : 'text-gray-600 hover:text-primary hover:bg-primary/5'
+              }`}
+            >
+              Horários
+            </Link>
+            {/* {isLoadingAuth ? (
+              <div className="w-24 h-10 bg-gray-100/50 animate-pulse rounded-lg mt-0.5"></div>
+            ) : (
+              isAuthenticated && (
+                
+              )
+            )}
+ */}
           </nav>
 
           {/* BOTÕES DE AÇÃO (DIREITA) */}
@@ -215,6 +234,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Agendar
             </Link>
 
+            <Link 
+              href="/dashboard/horarios" 
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`p-4 rounded-xl font-medium transition-all ${
+                pathname.startsWith('/dashboard/horarios') 
+                ? 'text-primary bg-primary/5 font-semibold' 
+                : 'text-gray-600 active:bg-gray-50'
+              }`}
+            >
+              Horários
+            </Link>
+
             {/* LINK NO MOBILE RESTRITO PARA PACIENTES */}
             {!isLoadingAuth && !isAuthenticated && (
               <Link 
@@ -258,7 +289,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   Consultas
                 </Link>
 
+
+                
+
                 <hr className="my-4 border-gray-100" />
+
+                
                 
                 <button 
                   onClick={() => { setIsMobileMenuOpen(false); handleLogout(); }}
