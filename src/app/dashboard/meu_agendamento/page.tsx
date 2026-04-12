@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { 
   CalendarDays, Clock, MapPin, 
   ArrowLeft, Loader2, CheckCircle2, 
-  AlertCircle, XCircle 
+  AlertCircle, XCircle, Stethoscope
 } from 'lucide-react'
 
 type Agendamento = {
