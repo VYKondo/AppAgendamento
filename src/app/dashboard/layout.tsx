@@ -17,7 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   
-  // 👇 NOVO: Estado para saber se há um paciente "logado" via localStorage
+  // Estado para saber se há um paciente "logado" via localStorage
   const [hasPatientToken, setHasPatientToken] = useState(false)
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [])
 
-  // 👇 NOVO: Verifica se o paciente tem um token salvo toda vez que a rota mudar
+  // Verifica se o paciente tem um token salvo toda vez que a rota mudar
   useEffect(() => {
     const token = localStorage.getItem('meu_token_paciente')
     setHasPatientToken(!!token)
@@ -54,7 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push('/')
   }
 
-  // 👇 NOVO: Função exclusiva para o PACIENTE limpar seu CPF
+  // Função exclusiva para o PACIENTE limpar seu CPF
   const handleSairPaciente = () => {
     localStorage.removeItem('meu_token_paciente')
     setHasPatientToken(false)
@@ -114,24 +114,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </Link>
             )}
               
-            {/* BOTÃO RESTRITO PARA MÉDICOS */}
+            {/* BOTÕES RESTRITOS PARA MÉDICOS / RECEPÇÃO */}
             {isLoadingAuth ? (
               <div className="w-24 h-10 bg-gray-100/50 animate-pulse rounded-lg mt-0.5"></div>
             ) : (
               isAuthenticated && (
-                <Link 
-                  href="/dashboard/consultas" 
-                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                    pathname.startsWith('/dashboard/consultas') 
-                    ? 'text-primary bg-primary/5 font-semibold' 
-                    : 'text-gray-600 hover:text-primary hover:bg-primary/5'
-                  }`}
-                >
-                  Consultas
-                </Link>
-                
+                <>
+                  <Link 
+                    href="/dashboard/consultas" 
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                      pathname.startsWith('/dashboard/consultas') 
+                      ? 'text-primary bg-primary/5 font-semibold' 
+                      : 'text-gray-600 hover:text-primary hover:bg-primary/5'
+                    }`}
+                  >
+                    Consultas
+                  </Link>
+
+                  {/* 👇 NOVO: Link da Recepção (Apenas Autenticados) */}
+                  <Link 
+                    href="/dashboard/recepcao" 
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                      pathname.startsWith('/dashboard/recepcao') 
+                      ? 'text-primary bg-primary/5 font-semibold' 
+                      : 'text-gray-600 hover:text-primary hover:bg-primary/5'
+                    }`}
+                  >
+                    Recepção
+                  </Link>
+                </>
               )
             )}
+            
             <Link 
               href="/dashboard/horarios" 
               className={`px-4 py-2 rounded-lg font-medium transition-all ${
@@ -142,14 +156,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               Horários
             </Link>
-            {/* {isLoadingAuth ? (
-              <div className="w-24 h-10 bg-gray-100/50 animate-pulse rounded-lg mt-0.5"></div>
-            ) : (
-              isAuthenticated && (
-                
-              )
-            )}
- */}
           </nav>
 
           {/* BOTÕES DE AÇÃO (DIREITA) */}
@@ -165,7 +171,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             )}
 
-            {/* 👇 NOVO: BOTÃO DE SAIR - PACIENTE (Aparece se não for médico e tiver token) */}
+            {/* BOTÃO DE SAIR - PACIENTE (Aparece se não for médico e tiver token) */}
             {!isLoadingAuth && !isAuthenticated && hasPatientToken && (
               <button 
                 onClick={handleSairPaciente}
@@ -261,7 +267,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </Link>
             )}
 
-            {/* 👇 NOVO: BOTÃO SAIR MOBILE - PACIENTE */}
+            {/* BOTÃO SAIR MOBILE - PACIENTE */}
             {!isLoadingAuth && !isAuthenticated && hasPatientToken && (
               <>
                 <hr className="my-4 border-gray-100" />
@@ -274,7 +280,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </>
             )}
 
-            {/* MENU MOBILE DO MÉDICO */}
+            {/* MENU MOBILE DO MÉDICO / RECEPÇÃO */}
             {!isLoadingAuth && isAuthenticated && (
               <>
                 <Link 
@@ -289,13 +295,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   Consultas
                 </Link>
 
-
-                
+                {/* 👇 NOVO: Link da Recepção Mobile (Apenas Autenticados) */}
+                <Link 
+                  href="/dashboard/recepcao" 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`p-4 rounded-xl font-medium transition-all ${
+                    pathname.startsWith('/dashboard/recepcao') 
+                    ? 'text-primary bg-primary/5 font-semibold' 
+                    : 'text-gray-600 active:bg-gray-50'
+                  }`}
+                >
+                  Recepção
+                </Link>
 
                 <hr className="my-4 border-gray-100" />
 
-                
-                
                 <button 
                   onClick={() => { setIsMobileMenuOpen(false); handleLogout(); }}
                   className="flex items-center gap-2 p-4 rounded-xl font-medium text-red-600 active:bg-red-50 text-left"

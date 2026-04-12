@@ -114,14 +114,16 @@ export default function MeusAgendamentosPage() {
                 </div>
 
                 <div className={`px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2 border ${
-                    ag.status === 'pendente' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
-                    ag.status === 'confirmado' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
-                    'bg-red-50 text-red-600 border-red-200'
+                    ag.status === 'agendado' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                    ag.status === 'aguardando' ? 'bg-amber-50 text-amber-600 border-amber-200' :
+                    ag.status === 'em_atendimento' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                    'bg-green-50 text-green-600 border-green-200'
                 }`}>
-                  {ag.status === 'confirmado' && <CheckCircle2 size={16} />}
-                  {ag.status === 'pendente' && <AlertCircle size={16} />}
-                  {ag.status === 'cancelado' && <XCircle size={16} />}
-                  <span className="capitalize">{ag.status}</span>
+                  {ag.status === 'agendado' && <CalendarDays size={16} />}
+                  {ag.status === 'aguardando' && <Clock size={16} />}
+                  {ag.status === 'em_atendimento' && <Stethoscope size={16} />}
+                  {ag.status === 'finalizado' && <CheckCircle2 size={16} />}
+                  <span className="capitalize">{ag.status === 'agendado' ? 'Agendado' : ag.status === 'aguardando' ? 'Aguardando' : ag.status === 'em_atendimento' ? 'Em Atendimento' : 'Finalizado'}</span>
                 </div>
                 
               </div>

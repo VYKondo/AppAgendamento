@@ -44,9 +44,9 @@ type Agendamento = {
 
 // ── Constantes ──────────────────────────────────────────────────
 const LISTA_PROFISSIONAIS = [
-  'Gleiciane (município A)',
-  'Carlos (município B)',
-  'Adriana (município C)',
+  'Gleiciane (Município A)',
+  'Carlos (Município B)',
+  'Adriana (Município C)',
 ]
 
 // ── Paleta ──────────────────────────────────────────────────────
@@ -76,14 +76,15 @@ const C = {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; color: string; icon: React.ReactNode; label: string }> = {
-    pendente:   { bg: '#FFFBEB', color: '#92400E', icon: <Clock size={11} />,        label: 'Pendente'   },
-    confirmado: { bg: '#ECFDF5', color: '#166534', icon: <CheckCircle2 size={11} />, label: 'Confirmado' },
-    cancelado:  { bg: '#FFF1F2', color: '#9F1239', icon: <XCircle size={11} />,      label: 'Cancelado'  },
+    agendado:       { bg: '#F4F4F5', color: '#52525B', icon: <CalendarDays size={11} />,  label: 'Agendado' },
+    aguardando:     { bg: '#FFFBEB', color: '#D97706', icon: <Clock size={11} />,         label: 'Na Sala de Espera' },
+    em_atendimento: { bg: '#EFF6FF', color: '#2563EB', icon: <Stethoscope size={11} />,   label: 'Em Atendimento' },
+    finalizado:     { bg: '#ECFDF5', color: '#166534', icon: <CheckCircle2 size={11} />,  label: 'Finalizado' },
   }
-  const s = map[status] ?? map['pendente']
+  const s = map[status] ?? map['agendado']
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold shadow-sm border"
-      style={{ background: s.bg, color: s.color, borderColor: `${s.color}20` }}>
+      style={{ background: s.bg, color: s.color, borderColor: `${s.color}30` }}>
       {s.icon} {s.label}
     </span>
   )
@@ -132,17 +133,21 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
   )
 }
 
-function EditInput({ value, onChange, placeholder, type = 'text', className = '' }: {
-  value: string; onChange: (v: string) => void; placeholder?: string; type?: string; className?: string
+// CORRIGIDO: Agora recebe a propriedade "label" para exibir o nome do campo acima do input
+function EditInput({ label, value, onChange, placeholder, type = 'text', className = '' }: {
+  label?: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; className?: string
 }) {
   return (
-    <input
-      type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-      className={`w-full h-full text-sm font-medium px-3.5 py-2.5 rounded-xl outline-none border shadow-sm transition-all ${className}`}
-      style={{ backgroundColor: C.white, borderColor: C.gray200, color: C.gray800 }}
-      onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 4px ${C.pink50}` }}
-      onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = '0 1px 2px 0 rgb(0 0 0 / 0.05)' }}
-    />
+    <div className="w-full flex flex-col justify-end">
+      {label && <p className="text-[10px] font-extrabold uppercase tracking-widest mb-1.5" style={{ color: C.gray400 }}>{label}</p>}
+      <input
+        type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        className={`w-full text-sm font-medium px-3.5 py-2.5 rounded-xl outline-none border shadow-sm transition-all ${className}`}
+        style={{ backgroundColor: C.white, borderColor: C.gray200, color: C.gray800 }}
+        onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 4px ${C.pink50}` }}
+        onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = '0 1px 2px 0 rgb(0 0 0 / 0.05)' }}
+      />
+    </div>
   )
 }
 
@@ -159,21 +164,39 @@ export default function ConsultasPage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'success' | 'info'; id: number } | null>(null)
 
-  const [editingCpf, setEditingCpf] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Partial<Paciente>>({})
+  const [editAgendamentoForm, setEditAgendamentoForm] = useState<Partial<Agendamento>>({})
   const [savingEdit, setSavingEdit] = useState(false)
 
   const showToast = (message: string, type: 'error' | 'warning' | 'success' | 'info' = 'warning') => {
     setToast({ message, type, id: Date.now() })
   }
 
-  useEffect(() => {
-    if (!toast) return
-    const t = setTimeout(() => setToast(null), 4000)
-    return () => clearTimeout(t)
-  }, [toast])
-
   useEffect(() => { verificarAcessoEBuscarDados() }, [])
+
+  // ─── NOVO: REALTIME FOCADO APENAS NO STATUS ───
+  useEffect(() => {
+    const subscription = supabase.channel('consultas_status_realtime')
+      .on(
+        'postgres_changes', 
+        { event: 'UPDATE', schema: 'public', table: 'agendamentos' }, 
+        (payload) => {
+          // Quando o banco de dados avisa que houve um UPDATE, nós não recarregamos a página.
+          // Em vez disso, varremos a lista na memória e atualizamos SOMENTE o status daquele ID.
+          setAgendamentos((prevAgendamentos) => 
+            prevAgendamentos.map((ag) => 
+              ag.id === payload.new.id 
+                ? { ...ag, status: payload.new.status } // Substitui apenas o status
+                : ag
+            )
+          )
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(subscription) }
+  }, [])
+  // ──────────────────────────────────────────────
 
   const verificarAcessoEBuscarDados = async () => {
     try {
@@ -206,18 +229,38 @@ export default function ConsultasPage() {
     }
   }
 
-  const iniciarEdicao = (paciente: Paciente) => { setEditingCpf(paciente.cpf); setEditForm(paciente) }
-  const cancelarEdicao = () => { setEditingCpf(null); setEditForm({}) }
+  const iniciarEdicao = (ag: Agendamento) => { 
+    setEditingId(ag.id)
+    setEditForm(ag.paciente || {}) 
+    setEditAgendamentoForm(ag)
+  }
+  
+  const cancelarEdicao = () => { 
+    setEditingId(null)
+    setEditForm({}) 
+    setEditAgendamentoForm({})
+  }
 
   const salvarEdicao = async () => {
-    if (!editingCpf) return
+    if (!editingId) return
     setSavingEdit(true)
     try {
-      const { error } = await supabase.from('pacientes').update(editForm).eq('cpf', editingCpf)
-      if (error) throw error
-      showToast('Ficha atualizada com sucesso!', 'success')
+      if (editForm.cpf) {
+        const { error: errPaciente } = await supabase.from('pacientes').update(editForm).eq('cpf', editForm.cpf)
+        if (errPaciente) throw errPaciente
+      }
+
+      const { error: errAgendamento } = await supabase.from('agendamentos').update({
+        data_agendamento: editAgendamentoForm.data_agendamento,
+        horario_agendamento: editAgendamentoForm.horario_agendamento,
+        profissional: editAgendamentoForm.profissional
+      }).eq('id', editingId)
+      
+      if (errAgendamento) throw errAgendamento
+
+      showToast('Dados atualizados com sucesso!', 'success')
       await verificarAcessoEBuscarDados()
-      setEditingCpf(null)
+      setEditingId(null)
     } catch { showToast('Erro ao atualizar os dados.', 'error') }
     finally { setSavingEdit(false) }
   }
@@ -226,18 +269,49 @@ export default function ConsultasPage() {
     try {
       const { error } = await supabase.from('agendamentos').update({ status: novoStatus }).eq('id', id)
       if (error) throw error
-      showToast(`Consulta ${novoStatus} com sucesso!`, 'success')
+      showToast(`Consulta atualizada para ${novoStatus.replace('_', ' ')}!`, 'success')
       verificarAcessoEBuscarDados()
     } catch { showToast('Erro ao alterar o status.', 'error') }
   }
 
-  const alterarProfissionalConsulta = async (id: string, novoProfissional: string) => {
+  const finalizarEChamarProximo = async (idAtual: string, profissional: string) => {
     try {
-      const { error } = await supabase.from('agendamentos').update({ profissional: novoProfissional }).eq('id', id)
-      if (error) throw error
-      showToast('Profissional atualizado!', 'success')
+      await supabase.from('agendamentos').update({ status: 'finalizado' }).eq('id', idAtual)
+
+      const hoje = new Date().toISOString().split('T')[0]
+      const { data: proximoData, error: errBusca } = await supabase
+        .from('agendamentos')
+        .select('id, paciente_cpf')
+        .eq('status', 'aguardando')
+        .eq('data_agendamento', hoje)
+        .eq('profissional', profissional)
+        .order('horario_agendamento', { ascending: true })
+        .limit(1)
+
+      if (errBusca) throw errBusca
+
+      if (proximoData && proximoData.length > 0) {
+        const proximoId = proximoData[0].id
+        await supabase.from('agendamentos').update({ status: 'em_atendimento' }).eq('id', proximoId)
+        showToast('Consulta finalizada! O próximo paciente foi chamado.', 'success')
+      } else {
+        showToast('Consulta finalizada. A sala de espera está vazia no momento.', 'info')
+      }
+
       verificarAcessoEBuscarDados()
-    } catch { showToast('Erro ao alterar profissional.', 'error') }
+    } catch { 
+      showToast('Erro ao processar a fila de espera.', 'error') 
+    }
+  }
+
+  const deletarAgendamento = async (id: string) => {
+    if (!window.confirm("Tem certeza que deseja cancelar e excluir este agendamento? Esta ação não pode ser desfeita.")) return;
+    try {
+      const { error } = await supabase.from('agendamentos').delete().eq('id', id)
+      if (error) throw error
+      showToast('Agendamento removido com sucesso!', 'success')
+      verificarAcessoEBuscarDados()
+    } catch { showToast('Erro ao excluir o agendamento.', 'error') }
   }
 
   const formatarData = (d?: string) => d ? d.split('-').reverse().join('/') : ''
@@ -245,7 +319,7 @@ export default function ConsultasPage() {
   const formatarCPF  = (c: string) => c ? c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : ''
 
   const toggleRow = (id: string) => {
-    if (editingCpf) { showToast('Salve ou descarte as alterações antes de continuar.', 'warning'); return }
+    if (editingId) { showToast('Salve ou descarte as alterações antes de continuar.', 'warning'); return }
     setExpandedRow(expandedRow === id ? null : id)
   }
 
@@ -259,22 +333,22 @@ export default function ConsultasPage() {
     )
   })
 
-  const total       = agendamentos.length
-  const pendentes   = agendamentos.filter(a => a.status === 'pendente').length
-  const confirmados = agendamentos.filter(a => a.status === 'confirmado').length
+  const total          = agendamentos.length
+  const naSalaDeEspera = agendamentos.filter(a => a.status === 'aguardando').length
 
   // ── FUNÇÃO CENTRALIZADA DE RENDERIZAÇÃO DA FICHA COMPLETA ──
+  // CORRIGIDO: Todos os inputs de edição agora recebem a prop "label"
   const renderFichaPaciente = (paciente: Paciente, isEditingThis: boolean) => (
     <div className="flex flex-col gap-8">
       {/* ── DADOS BÁSICOS ── */}
       <Section icon={<User size={14} />} title="Dados básicos">
         {isEditingThis ? (
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div className="sm:col-span-12"><EditInput value={editForm.nome_completo || ''} onChange={v => setEditForm({ ...editForm, nome_completo: v })} placeholder="Nome completo" /></div>
+            <div className="sm:col-span-12"><EditInput label="Nome completo" value={editForm.nome_completo || ''} onChange={v => setEditForm({ ...editForm, nome_completo: v })} placeholder="Nome completo" /></div>
             <div className="sm:col-span-3"><ReadField label="CPF" value={formatarCPF(paciente.cpf)} mono /></div>
-            <div className="sm:col-span-3"><EditInput value={editForm.cns || ''} onChange={v => setEditForm({ ...editForm, cns: v })} placeholder="CNS" /></div>
-            <div className="sm:col-span-3"><EditInput type="date" value={editForm.data_nascimento || ''} onChange={v => setEditForm({ ...editForm, data_nascimento: v })} /></div>
-            <div className="sm:col-span-3"><EditInput value={editForm.telefone || ''} onChange={v => setEditForm({ ...editForm, telefone: v })} placeholder="Telefone" /></div>
+            <div className="sm:col-span-3"><EditInput label="CNS" value={editForm.cns || ''} onChange={v => setEditForm({ ...editForm, cns: v })} placeholder="CNS" /></div>
+            <div className="sm:col-span-3"><EditInput label="Nascimento" type="date" value={editForm.data_nascimento || ''} onChange={v => setEditForm({ ...editForm, data_nascimento: v })} /></div>
+            <div className="sm:col-span-3"><EditInput label="Telefone" value={editForm.telefone || ''} onChange={v => setEditForm({ ...editForm, telefone: v })} placeholder="Telefone" /></div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
@@ -291,12 +365,12 @@ export default function ConsultasPage() {
       <Section icon={<Heart size={14} />} title="Família e Identidade">
         {isEditingThis ? (
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div className="sm:col-span-6"><EditInput value={editForm.nome_mae || ''} onChange={v => setEditForm({ ...editForm, nome_mae: v })} placeholder="Nome da mãe" /></div>
-            <div className="sm:col-span-6"><EditInput value={editForm.nome_pai || ''} onChange={v => setEditForm({ ...editForm, nome_pai: v })} placeholder="Nome do pai" /></div>
-            <div className="sm:col-span-6"><EditInput value={editForm.nome_social || ''} onChange={v => setEditForm({ ...editForm, nome_social: v })} placeholder="Nome social" /></div>
-            <div className="sm:col-span-6"><EditInput value={editForm.identidade_genero || ''} onChange={v => setEditForm({ ...editForm, identidade_genero: v })} placeholder="Identidade de gênero" /></div>
-            <div className="sm:col-span-6"><EditInput value={editForm.orientacao_sexual || ''} onChange={v => setEditForm({ ...editForm, orientacao_sexual: v })} placeholder="Orientação sexual" /></div>
-            <div className="sm:col-span-6"><EditInput value={editForm.nacionalidade || ''} onChange={v => setEditForm({ ...editForm, nacionalidade: v })} placeholder="Nacionalidade" /></div>
+            <div className="sm:col-span-6"><EditInput label="Nome da mãe" value={editForm.nome_mae || ''} onChange={v => setEditForm({ ...editForm, nome_mae: v })} placeholder="Nome da mãe" /></div>
+            <div className="sm:col-span-6"><EditInput label="Nome do pai" value={editForm.nome_pai || ''} onChange={v => setEditForm({ ...editForm, nome_pai: v })} placeholder="Nome do pai" /></div>
+            <div className="sm:col-span-6"><EditInput label="Nome social" value={editForm.nome_social || ''} onChange={v => setEditForm({ ...editForm, nome_social: v })} placeholder="Nome social" /></div>
+            <div className="sm:col-span-6"><EditInput label="Identidade de gênero" value={editForm.identidade_genero || ''} onChange={v => setEditForm({ ...editForm, identidade_genero: v })} placeholder="Ex: Homem Trans" /></div>
+            <div className="sm:col-span-6"><EditInput label="Orientação sexual" value={editForm.orientacao_sexual || ''} onChange={v => setEditForm({ ...editForm, orientacao_sexual: v })} placeholder="Ex: Heterossexual" /></div>
+            <div className="sm:col-span-6"><EditInput label="Nacionalidade" value={editForm.nacionalidade || ''} onChange={v => setEditForm({ ...editForm, nacionalidade: v })} placeholder="Ex: Brasileiro" /></div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
@@ -314,14 +388,14 @@ export default function ConsultasPage() {
       <Section icon={<Home size={14} />} title="Endereço principal">
         {isEditingThis ? (
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-            <div className="sm:col-span-3"><EditInput value={editForm.cep || ''} onChange={v => setEditForm({ ...editForm, cep: v })} placeholder="CEP" /></div>
-            <div className="sm:col-span-7"><EditInput value={editForm.logradouro || ''} onChange={v => setEditForm({ ...editForm, logradouro: v })} placeholder="Logradouro" /></div>
-            <div className="sm:col-span-2"><EditInput value={editForm.numero || ''} onChange={v => setEditForm({ ...editForm, numero: v })} placeholder="Nº" /></div>
+            <div className="sm:col-span-3"><EditInput label="CEP" value={editForm.cep || ''} onChange={v => setEditForm({ ...editForm, cep: v })} placeholder="CEP" /></div>
+            <div className="sm:col-span-7"><EditInput label="Logradouro" value={editForm.logradouro || ''} onChange={v => setEditForm({ ...editForm, logradouro: v })} placeholder="Logradouro" /></div>
+            <div className="sm:col-span-2"><EditInput label="Nº" value={editForm.numero || ''} onChange={v => setEditForm({ ...editForm, numero: v })} placeholder="Nº" /></div>
             
-            <div className="sm:col-span-4"><EditInput value={editForm.complemento || ''} onChange={v => setEditForm({ ...editForm, complemento: v })} placeholder="Complemento (Ex: Apto 101)" /></div>
-            <div className="sm:col-span-3"><EditInput value={editForm.bairro || ''} onChange={v => setEditForm({ ...editForm, bairro: v })} placeholder="Bairro" /></div>
-            <div className="sm:col-span-3"><EditInput value={editForm.cidade || ''} onChange={v => setEditForm({ ...editForm, cidade: v })} placeholder="Cidade" /></div>
-            <div className="sm:col-span-2"><EditInput value={editForm.uf || ''} onChange={v => setEditForm({ ...editForm, uf: v })} placeholder="UF" /></div>
+            <div className="sm:col-span-4"><EditInput label="Complemento" value={editForm.complemento || ''} onChange={v => setEditForm({ ...editForm, complemento: v })} placeholder="Complemento (Ex: Apto 101)" /></div>
+            <div className="sm:col-span-3"><EditInput label="Bairro" value={editForm.bairro || ''} onChange={v => setEditForm({ ...editForm, bairro: v })} placeholder="Bairro" /></div>
+            <div className="sm:col-span-3"><EditInput label="Cidade" value={editForm.cidade || ''} onChange={v => setEditForm({ ...editForm, cidade: v })} placeholder="Cidade" /></div>
+            <div className="sm:col-span-2"><EditInput label="UF" value={editForm.uf || ''} onChange={v => setEditForm({ ...editForm, uf: v })} placeholder="UF" /></div>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
@@ -377,7 +451,7 @@ export default function ConsultasPage() {
             Painel de Consultas
           </h1>
           <p className="text-sm font-medium mt-1" style={{ color: C.gray500 }}>
-            Gerencie os agendamentos e acompanhe os pacientes.
+            Gerencie os agendamentos e acompanhe a Fila de Espera.
           </p>
         </div>
 
@@ -388,7 +462,7 @@ export default function ConsultasPage() {
           </div>
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm"
             style={{ background: '#FFFBEB', color: '#92400E', border: '1px solid #FEF3C7' }}>
-            <Clock size={14} /> {pendentes} Pendente{pendentes !== 1 ? 's' : ''}
+            <Clock size={14} /> {naSalaDeEspera} Na Sala de Espera
           </div>
         </div>
       </div>
@@ -427,9 +501,10 @@ export default function ConsultasPage() {
             onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 4px ${C.pink50}` }}
             onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = '0 1px 2px 0 rgb(0 0 0 / 0.05)' }}>
             <option value="todos">Todos os status</option>
-            <option value="pendente">Pendentes</option>
-            <option value="confirmado">Confirmados</option>
-            <option value="cancelado">Cancelados</option>
+            <option value="agendado">Agendados</option>
+            <option value="aguardando">Na Sala de Espera</option>
+            <option value="em_atendimento">Em Atendimento</option>
+            <option value="finalizado">Finalizados</option>
           </select>
         </div>
       </div>
@@ -461,7 +536,7 @@ export default function ConsultasPage() {
               {agendamentosFiltrados.map(ag => {
                 const isExpanded    = expandedRow === ag.id
                 const paciente      = ag.paciente
-                const isEditingThis = editingCpf === ag.paciente_cpf
+                const isEditingThis = editingId === ag.id
                 const nome = paciente?.nome_completo || 'Paciente Não Identificado'
                 const cpf  = ag.paciente_cpf ? formatarCPF(ag.paciente_cpf) : 'Sem CPF'
 
@@ -532,7 +607,6 @@ export default function ConsultasPage() {
 
                         <div className="flex-1 bg-white">
                           
-                          {/* Cabeçalho do Painel com Fundo Levemente Cinza/Rosa para Separar */}
                           <div className="flex items-center justify-between px-7 py-5" style={{ background: C.pink50, borderBottom: `1px solid ${C.pink100}` }}>
                             <div className="flex items-center gap-3">
                               <Avatar nome={nome} size="lg" />
@@ -545,7 +619,7 @@ export default function ConsultasPage() {
                             </div>
 
                             {!isEditingThis ? (
-                              <button onClick={() => iniciarEdicao(paciente)}
+                              <button onClick={() => iniciarEdicao(ag)}
                                 className="inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-sm bg-white"
                                 style={{ color: C.pink700, border: `1px solid ${C.pink200}` }}
                                 onMouseEnter={e => e.currentTarget.style.borderColor = C.pink400}
@@ -560,7 +634,6 @@ export default function ConsultasPage() {
                             )}
                           </div>
 
-                          {/* Renderiza a ficha injetando os dados - Fundo Branco */}
                           <div className="px-7 py-6">
                             {renderFichaPaciente(paciente, isEditingThis)}
 
@@ -587,46 +660,50 @@ export default function ConsultasPage() {
                           </div>
                         </div>
 
-                        {/* ── PAINEL DIREITO (AÇÕES) ── */}
+                        {/* ── PAINEL DIREITO (AÇÕES / AGENDAMENTO) ── */}
                         <div className="w-72 shrink-0 px-6 py-6 flex flex-col gap-6"
-                          style={{
-                            background: C.gray50,
-                            borderLeft: `1px solid ${C.gray200}`,
-                            opacity: isEditingThis ? 0.4 : 1,
-                            pointerEvents: isEditingThis ? 'none' : 'auto',
-                          }}>
+                          style={{ background: C.gray50, borderLeft: `1px solid ${C.gray200}` }}>
 
                           <div>
                             <p className="text-[10px] font-extrabold uppercase tracking-widest mb-2.5" style={{ color: C.gray400 }}>
                               Dados do Agendamento
                             </p>
-                            <div className="rounded-xl p-4 space-y-3 shadow-sm border bg-white" style={{ borderColor: C.gray200 }}>
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center border" style={{ background: C.gray50, borderColor: C.gray100 }}>
-                                  <CalendarDays size={14} style={{ color: C.gray600 }} />
+                            
+                            {isEditingThis ? (
+                              <div className="rounded-xl p-4 space-y-4 shadow-sm border bg-white" style={{ borderColor: C.gray200 }}>
+                                {/* CORRIGIDO: Utilizando o EditInput com a propriedade "label" */}
+                                <EditInput label="Data" type="date" value={editAgendamentoForm.data_agendamento || ''} onChange={v => setEditAgendamentoForm({ ...editAgendamentoForm, data_agendamento: v })} />
+                                <EditInput label="Horário" type="time" value={editAgendamentoForm.horario_agendamento || ''} onChange={v => setEditAgendamentoForm({ ...editAgendamentoForm, horario_agendamento: v })} />
+                              </div>
+                            ) : (
+                              <div className="rounded-xl p-4 space-y-3 shadow-sm border bg-white" style={{ borderColor: C.gray200 }}>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg flex items-center justify-center border" style={{ background: C.gray50, borderColor: C.gray100 }}>
+                                    <CalendarDays size={14} style={{ color: C.gray600 }} />
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: C.gray400 }}>Data</p>
+                                    <p className="text-sm font-extrabold mt-0.5" style={{ color: C.gray800 }}>
+                                      {formatarData(ag.data_agendamento)}
+                                    </p>
+                                  </div>
                                 </div>
-                                <div>
-                                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: C.gray400 }}>Data</p>
-                                  <p className="text-sm font-extrabold mt-0.5" style={{ color: C.gray800 }}>
-                                    {formatarData(ag.data_agendamento)}
-                                  </p>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg flex items-center justify-center border" style={{ background: C.gray50, borderColor: C.gray100 }}>
+                                    <Clock size={14} style={{ color: C.gray600 }} />
+                                  </div>
+                                  <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: C.gray400 }}>Horário</p>
+                                    <p className="text-sm font-extrabold mt-0.5" style={{ color: C.gray800 }}>
+                                      {formatarHora(ag.horario_agendamento)}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="pt-2 border-t" style={{ borderColor: C.gray100 }}>
+                                  <StatusBadge status={ag.status} />
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center border" style={{ background: C.gray50, borderColor: C.gray100 }}>
-                                  <Clock size={14} style={{ color: C.gray600 }} />
-                                </div>
-                                <div>
-                                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: C.gray400 }}>Horário</p>
-                                  <p className="text-sm font-extrabold mt-0.5" style={{ color: C.gray800 }}>
-                                    {formatarHora(ag.horario_agendamento)}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="pt-2 border-t" style={{ borderColor: C.gray100 }}>
-                                <StatusBadge status={ag.status} />
-                              </div>
-                            </div>
+                            )}
                           </div>
 
                           <div>
@@ -636,59 +713,56 @@ export default function ConsultasPage() {
                             <div className="relative shadow-sm">
                               <Stethoscope size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.pink400 }} />
                               <select
-                                value={ag.profissional || ''}
-                                onChange={e => alterarProfissionalConsulta(ag.id, e.target.value)}
-                                className="w-full pl-9 pr-3 py-3 text-sm rounded-xl border outline-none appearance-none cursor-pointer font-bold transition-all bg-white"
-                                style={{ borderColor: C.gray200, color: C.gray800 }}
-                                onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 4px ${C.pink50}` }}
-                                onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = 'none' }}>
+                                disabled={!isEditingThis}
+                                value={isEditingThis ? (editAgendamentoForm.profissional || '') : (ag.profissional || '')}
+                                onChange={e => setEditAgendamentoForm({ ...editAgendamentoForm, profissional: e.target.value })}
+                                className="w-full pl-9 pr-3 py-3 text-sm rounded-xl border outline-none appearance-none font-bold bg-white disabled:opacity-70 disabled:bg-gray-50"
+                                style={{ borderColor: C.gray200, color: C.gray800 }}>
                                 <option value="" disabled>Selecionar…</option>
                                 {LISTA_PROFISSIONAIS.map(p => <option key={p} value={p}>{p}</option>)}
                               </select>
                             </div>
                           </div>
 
-                          <div className="mt-auto space-y-2">
-                            {ag.status === 'pendente' && (
-                              <button
-                                onClick={() => alterarStatusConsulta(ag.id, 'confirmado')}
-                                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-extrabold rounded-xl text-white shadow-md transition-all"
-                                style={{ background: C.pink600 }}
-                                onMouseEnter={e => { e.currentTarget.style.background = C.pink700; e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${C.pink200}` }}
-                                onMouseLeave={e => { e.currentTarget.style.background = C.pink600; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '' }}>
-                                <CheckCircle2 size={16} /> Confirmar Atendimento
-                              </button>
-                            )}
+                          {/* ── AÇÕES DESKTOP ── */}
+                          {!isEditingThis && (
+                            <div className="mt-auto space-y-2">
+                              
+                              {ag.status === 'aguardando' && (
+                                <button onClick={() => alterarStatusConsulta(ag.id, 'em_atendimento')}
+                                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-extrabold rounded-xl text-white shadow-md transition-all hover:-translate-y-0.5"
+                                  style={{ background: C.pink600 }}>
+                                  <CheckCircle2 size={16} /> Iniciar Atendimento
+                                </button>
+                              )}
 
-                            {ag.status === 'confirmado' && (
-                              <div className="w-full flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-bold rounded-xl border shadow-sm"
-                                style={{ background: '#ECFDF5', color: '#166534', borderColor: '#D1FAE5' }}>
-                                <CheckCircle2 size={16} /> Consulta Confirmada
-                              </div>
-                            )}
+                              {ag.status === 'em_atendimento' && (
+                                <div className="space-y-2">
+                                  <button onClick={() => finalizarEChamarProximo(ag.id, ag.profissional || '')}
+                                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-extrabold rounded-xl text-white shadow-md transition-all hover:-translate-y-0.5"
+                                    style={{ background: '#2563EB' }}> 
+                                    <User size={16} /> Finalizar e Chamar Próximo
+                                  </button>
 
-                            {ag.status !== 'cancelado' && (
-                              <button
-                                onClick={() => alterarStatusConsulta(ag.id, 'cancelado')}
-                                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold rounded-xl border shadow-sm transition-all bg-white"
-                                style={{ color: '#DC2626', borderColor: C.gray200 }}
-                                onMouseEnter={e => { e.currentTarget.style.background = '#FFF1F2'; e.currentTarget.style.borderColor = '#FECDD3' }}
-                                onMouseLeave={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.borderColor = C.gray200 }}>
-                                <XCircle size={15} /> Cancelar consulta
-                              </button>
-                            )}
+                                  <button onClick={() => alterarStatusConsulta(ag.id, 'finalizado')}
+                                    className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold rounded-xl border shadow-sm transition-all"
+                                    style={{ color: '#166534', borderColor: '#D1FAE5', background: '#ECFDF5' }}>
+                                    Apenas Finalizar
+                                  </button>
+                                </div>
+                              )}
 
-                            {ag.status === 'cancelado' && (
-                              <button
-                                onClick={() => alterarStatusConsulta(ag.id, 'pendente')}
-                                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold rounded-xl border shadow-sm transition-all bg-white"
-                                style={{ color: C.gray700, borderColor: C.gray200 }}
-                                onMouseEnter={e => e.currentTarget.style.background = C.gray50}
-                                onMouseLeave={e => e.currentTarget.style.background = C.white}>
-                                Reabrir como pendente
-                              </button>
-                            )}
-                          </div>
+                              {ag.status !== 'finalizado' && (
+                                <button onClick={() => deletarAgendamento(ag.id)}
+                                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold rounded-xl border shadow-sm transition-all bg-white mt-4"
+                                  style={{ color: '#DC2626', borderColor: C.gray200 }}
+                                  onMouseEnter={e => { e.currentTarget.style.background = '#FFF1F2'; e.currentTarget.style.borderColor = '#FECDD3' }}
+                                  onMouseLeave={e => { e.currentTarget.style.background = C.white; e.currentTarget.style.borderColor = C.gray200 }}>
+                                  <XCircle size={15} /> Cancelar consulta
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                         </div>
                       </div>
@@ -713,7 +787,7 @@ export default function ConsultasPage() {
         ) : agendamentosFiltrados.map(ag => {
           const isExpanded    = expandedRow === ag.id
           const paciente      = ag.paciente
-          const isEditingThis = editingCpf === ag.paciente_cpf
+          const isEditingThis = editingId === ag.id
           const nome = paciente?.nome_completo || 'Paciente Não Identificado'
           const cpf  = ag.paciente_cpf ? formatarCPF(ag.paciente_cpf) : 'Sem CPF'
 
@@ -752,7 +826,7 @@ export default function ConsultasPage() {
                     </div>
                     
                     {!isEditingThis && (
-                      <button onClick={() => iniciarEdicao(paciente)}
+                      <button onClick={() => iniciarEdicao(ag)}
                         className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border shadow-sm"
                         style={{ color: C.pink700, background: C.pink50, borderColor: C.pink100 }}>
                         <Edit3 size={12} /> Editar
@@ -760,20 +834,32 @@ export default function ConsultasPage() {
                     )}
                   </div>
 
-                  {/* Ficha injetada aqui também (Perfeito no mobile pois já usa o sm:grid-cols-12) */}
                   <div className="mb-8">
                      {renderFichaPaciente(paciente, isEditingThis)}
                   </div>
 
-                  <div className="p-4 rounded-xl border mb-4" style={{ background: C.gray50, borderColor: C.gray200, opacity: isEditingThis ? 0.3 : 1, pointerEvents: isEditingThis ? 'none' : 'auto' }}>
+                  {isEditingThis && (
+                    <div className="p-4 rounded-xl border mb-4 space-y-4 bg-white" style={{ borderColor: C.gray200 }}>
+                      <p className="text-[10px] font-extrabold uppercase tracking-widest text-gray-400">
+                        Dados do Agendamento
+                      </p>
+                      {/* CORRIGIDO: Utilizando o EditInput com a propriedade "label" no mobile */}
+                      <EditInput label="Data" type="date" value={editAgendamentoForm.data_agendamento || ''} onChange={v => setEditAgendamentoForm({ ...editAgendamentoForm, data_agendamento: v })} />
+                      <EditInput label="Horário" type="time" value={editAgendamentoForm.horario_agendamento || ''} onChange={v => setEditAgendamentoForm({ ...editAgendamentoForm, horario_agendamento: v })} />
+                    </div>
+                  )}
+
+                  <div className="p-4 rounded-xl border mb-4" style={{ background: isEditingThis ? C.white : C.gray50, borderColor: C.gray200 }}>
                     <p className="text-[10px] font-extrabold uppercase tracking-widest mb-2.5" style={{ color: C.gray400 }}>
                       Profissional responsável
                     </p>
                     <div className="relative shadow-sm">
                       <Stethoscope size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.gray400 }} />
-                      <select value={ag.profissional || ''}
-                        onChange={e => alterarProfissionalConsulta(ag.id, e.target.value)}
-                        className="w-full pl-9 pr-3 py-3 text-sm rounded-xl border outline-none appearance-none font-bold bg-white"
+                      <select 
+                        disabled={!isEditingThis}
+                        value={isEditingThis ? (editAgendamentoForm.profissional || '') : (ag.profissional || '')}
+                        onChange={e => setEditAgendamentoForm({ ...editAgendamentoForm, profissional: e.target.value })}
+                        className="w-full pl-9 pr-3 py-3 text-sm rounded-xl border outline-none appearance-none font-bold bg-white disabled:opacity-70 disabled:bg-gray-50"
                         style={{ borderColor: C.gray200, color: C.gray800 }}>
                         <option value="" disabled>Selecionar…</option>
                         {LISTA_PROFISSIONAIS.map(p => <option key={p} value={p}>{p}</option>)}
@@ -781,29 +867,42 @@ export default function ConsultasPage() {
                     </div>
                   </div>
 
-                  <div className={`space-y-2.5 ${isEditingThis ? 'opacity-30 pointer-events-none' : ''}`}>
-                    {ag.status === 'pendente' && (
-                      <button onClick={() => alterarStatusConsulta(ag.id, 'confirmado')}
-                        className="w-full inline-flex items-center justify-center gap-2 py-3.5 text-sm font-extrabold rounded-xl text-white shadow-md"
-                        style={{ background: C.pink600 }}>
-                        <CheckCircle2 size={16} /> Confirmar Atendimento
-                      </button>
-                    )}
-                    {ag.status !== 'cancelado' && (
-                      <button onClick={() => alterarStatusConsulta(ag.id, 'cancelado')}
-                        className="w-full inline-flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-xl border shadow-sm bg-white"
-                        style={{ color: '#DC2626', borderColor: C.gray200 }}>
-                        <XCircle size={15} /> Cancelar consulta
-                      </button>
-                    )}
-                    {ag.status === 'cancelado' && (
-                      <button onClick={() => alterarStatusConsulta(ag.id, 'pendente')}
-                        className="w-full inline-flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-xl border shadow-sm bg-white"
-                        style={{ color: C.gray700, borderColor: C.gray200 }}>
-                        Reabrir como pendente
-                      </button>
-                    )}
-                  </div>
+                  {/* ── AÇÕES MOBILE ── */}
+                  {!isEditingThis && (
+                    <div className="space-y-2.5 mt-2">
+                      
+                      {ag.status === 'aguardando' && (
+                        <button onClick={() => alterarStatusConsulta(ag.id, 'em_atendimento')}
+                          className="w-full inline-flex items-center justify-center gap-2 py-3.5 text-sm font-extrabold rounded-xl text-white shadow-md"
+                          style={{ background: C.pink600 }}>
+                          <CheckCircle2 size={16} /> Iniciar Atendimento
+                        </button>
+                      )}
+
+                      {ag.status === 'em_atendimento' && (
+                        <>
+                          <button onClick={() => finalizarEChamarProximo(ag.id, ag.profissional || '')}
+                            className="w-full inline-flex items-center justify-center gap-2 py-3.5 text-sm font-extrabold rounded-xl text-white shadow-md"
+                            style={{ background: '#2563EB' }}>
+                            <User size={16} /> Finalizar e Chamar Próximo
+                          </button>
+                          <button onClick={() => alterarStatusConsulta(ag.id, 'finalizado')}
+                            className="w-full inline-flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-xl border shadow-sm"
+                            style={{ color: '#166534', borderColor: '#D1FAE5', background: '#ECFDF5' }}>
+                            Apenas Finalizar
+                          </button>
+                        </>
+                      )}
+                      
+                      {ag.status !== 'finalizado' && (
+                        <button onClick={() => deletarAgendamento(ag.id)}
+                          className="w-full inline-flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-xl border shadow-sm bg-white"
+                          style={{ color: '#DC2626', borderColor: C.gray200 }}>
+                          <XCircle size={15} /> Cancelar consulta
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {isEditingThis && (
                     <div className="flex gap-3 pt-4 mt-4 border-t" style={{ borderColor: C.gray200 }}>

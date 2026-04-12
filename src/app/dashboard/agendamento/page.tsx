@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAgendamentoStore } from '@/store/useAgendamentoStore'
 import { supabase } from '@/lib/supabase'
@@ -10,22 +10,6 @@ import {
   UserCircle, CheckCircle2, FileText, MapPin, User,
   Check, Info, AlertTriangle, XCircle, X, Stethoscope
 } from 'lucide-react'
-
-// ─── Constantes ────────────────────────────────────────────────
-const LISTA_PROFISSIONAIS = [
-  { nome: 'Gleiciane', municipio: 'Município A', iniciais: 'GL' },
-  { nome: 'Carlos',    municipio: 'Município B', iniciais: 'CA' },
-  { nome: 'Adriana',   municipio: 'Município C', iniciais: 'AD' },
-]
-
-const HORARIOS = ['08:00', '08:30', '09:15', '10:00', '11:30', '14:00', '15:15', '16:30']
-
-const MESES = [
-  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
-]
-
-
 
 // ─── Paleta rosa ────────────────────────────────────────────────
 const C = {
@@ -43,18 +27,59 @@ const C = {
   gray800: '#18181B',
 }
 
+// ─── Tipos ──────────────────────────────────────────────────────
+type EscalaMedica = {
+  profissional: string
+  dia_semana: number
+  tipo_escala: 'semanal' | 'intercalada'
+  data_base_intercalada: string | null
+  horarios: string[]
+}
+
+type Profissional = {
+  nome: string
+  municipio: string
+  iniciais: string
+}
+
+// ─── Constantes ─────────────────────────────────────────────────
+const MESES = [
+  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
+]
+
+// ─── Helpers ────────────────────────────────────────────────────
 const formatarTelefone = (value: string) => {
-  if (!value) return ""
-  // Remove tudo o que não é dígito
-  value = value.replace(/\D/g, "")
-  // (00) 00000-0000
-  value = value.replace(/^(\d{2})(\d)/g, "($1) $2")
-  value = value.replace(/(\d{5})(\d)/, "$1-$2")
-  // Limita a 11 dígitos (DDD + 9 números)
+  if (!value) return ''
+  value = value.replace(/\D/g, '')
+  value = value.replace(/^(\d{2})(\d)/g, '($1) $2')
+  value = value.replace(/(\d{5})(\d)/, '$1-$2')
   return value.substring(0, 15)
 }
 
-// ─── Helpers de estilo ─────────────────────────────────────────
+/**
+ * Determina se a semana da `data` está "ativa" para uma escala intercalada.
+ * Retorna true se a diferença em semanas (ISO) entre `data` e `dataBase` for PAR.
+ */
+const isSemanaAtiva = (data: Date, dataBase: string): boolean => {
+  const base = new Date(dataBase + 'T00:00:00')
+  // Normaliza ambas para início da semana (domingo)
+  const normData = new Date(data)
+  normData.setHours(0, 0, 0, 0)
+  const normBase = new Date(base)
+  normBase.setHours(0, 0, 0, 0)
+  const diffMs = normData.getTime() - normBase.getTime()
+  const diffSemanas = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000))
+  return diffSemanas % 2 === 0
+}
+
+const gerarIniciais = (nome: string): string => {
+  const partes = nome.trim().split(' ')
+  if (partes.length >= 2) return (partes[0][0] + partes[1][0]).toUpperCase()
+  return nome.substring(0, 2).toUpperCase()
+}
+
+// ─── Helpers de estilo ──────────────────────────────────────────
 const stepNumCls = (state: 'done' | 'active' | 'idle') => {
   const base = 'w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-all duration-200 font-heading'
   if (state === 'done')   return `${base} text-white`
@@ -67,7 +92,7 @@ const stepNumStyle = (state: 'done' | 'active' | 'idle') => {
   return { background: '#fff', color: C.gray400 }
 }
 
-// ─── Componente principal ──────────────────────────────────────
+// ─── Componente principal ────────────────────────────────────────
 export default function AgendamentoPage() {
   const router = useRouter()
   const { formData, setFormData } = useAgendamentoStore()
@@ -82,30 +107,25 @@ export default function AgendamentoPage() {
     setToast({ message, type, id: Date.now() })
   }
 
-  const [isAuthUser, setIsAuthUser] = useState(false)
-  
-  useEffect(() => {
-    const verificarSessao = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setIsAuthUser(!!session) // Fica true se o médico estiver logado
-    }
-
-    verificarSessao()
-
-    // Escuta mudanças (caso o médico faça login/logout na mesma aba)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthUser(!!session)
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-  // 👆 FIM DO BLOCO NOVO
-
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 4000)
     return () => clearTimeout(t)
-  }, [toast]) 
+  }, [toast])
+
+  // Sessão
+  const [isAuthUser, setIsAuthUser] = useState(false)
+  useEffect(() => {
+    const verificarSessao = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setIsAuthUser(!!session)
+    }
+    verificarSessao()
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthUser(!!session)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
 
   // Confirmação
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false)
@@ -116,8 +136,16 @@ export default function AgendamentoPage() {
   const [statusPaciente, setStatusPaciente] = useState<'pendente' | 'novo' | 'existente'>('pendente')
   const [verificandoCpf, setVerificandoCpf] = useState(false)
 
-  // Profissional
+  // Profissionais — carregados dinamicamente do banco
+  const [listaProfissionais, setListaProfissionais] = useState<Profissional[]>([])
+  const [carregandoProfissionais, setCarregandoProfissionais] = useState(true)
   const [profissionalSelecionado, setProfissionalSelecionado] = useState('')
+
+  // Escalas e vagas
+  const [escalas, setEscalas] = useState<EscalaMedica[]>([])
+  const [carregandoEscalas, setCarregandoEscalas] = useState(false)
+  const [horariosDisponiveis, setHorariosDisponiveis] = useState<string[]>([])
+  const [carregandoHorarios, setCarregandoHorarios] = useState(false)
 
   // Dados pessoais
   const [nomeCompleto,      setNomeCompleto]      = useState('')
@@ -133,24 +161,169 @@ export default function AgendamentoPage() {
   const [fatherNotDeclared, setFatherNotDeclared] = useState(false)
 
   // Contato / endereço
-  const [telefone,   setTelefone]   = useState('')
-  const [cep,        setCep]        = useState('')
-  const [rua,        setRua]        = useState('')
-  const [numero,     setNumero]     = useState('')
-  const [complemento,setComplemento]= useState('')
-  const [bairro,     setBairro]     = useState('')
-  const [cidade,     setCidade]     = useState('')
-  const [uf,         setUf]         = useState('')
-  const [loadingCep, setLoadingCep] = useState(false)
+  const [telefone,    setTelefone]    = useState('')
+  const [cep,         setCep]         = useState('')
+  const [rua,         setRua]         = useState('')
+  const [numero,      setNumero]      = useState('')
+  const [complemento, setComplemento] = useState('')
+  const [bairro,      setBairro]      = useState('')
+  const [cidade,      setCidade]      = useState('')
+  const [uf,          setUf]          = useState('')
+  const [loadingCep,  setLoadingCep]  = useState(false)
 
   // Calendário
   const [currentDate, setCurrentDate] = useState(new Date())
-  const currentYear  = currentDate.getFullYear()
-  const currentMonth = currentDate.getMonth()
-  const diasNoMes       = new Date(currentYear, currentMonth + 1, 0).getDate()
-  const primeiroDiaDoMes = new Date(currentYear, currentMonth, 1).getDay()
-  const espacosVazios   = Array.from({ length: primeiroDiaDoMes })
-  const dias            = Array.from({ length: diasNoMes }, (_, i) => i + 1)
+  const currentYear       = currentDate.getFullYear()
+  const currentMonth      = currentDate.getMonth()
+  const diasNoMes         = new Date(currentYear, currentMonth + 1, 0).getDate()
+  const primeiroDiaDoMes  = new Date(currentYear, currentMonth, 1).getDay()
+  const espacosVazios     = Array.from({ length: primeiroDiaDoMes })
+  const dias              = Array.from({ length: diasNoMes }, (_, i) => i + 1)
+
+  // ─── Carregar profissionais únicos da tabela escalas_medicas ──
+  useEffect(() => {
+    const carregarProfissionais = async () => {
+      setCarregandoProfissionais(true)
+      try {
+        const { data, error } = await supabase
+          .from('escalas_medicas')
+          .select('profissional')
+          .order('profissional')
+
+        if (error) throw error
+
+        // Deduplica e constrói a lista
+        const nomesUnicos = [...new Set((data ?? []).map((r: { profissional: string }) => r.profissional))]
+        const profissionais: Profissional[] = nomesUnicos.map(nome => {
+          // O campo "profissional" pode ter formato "Nome (Município)"
+          const match = nome.match(/^(.+?)\s*\((.+?)\)$/)
+          if (match) {
+            return { nome: match[1].trim(), municipio: match[2].trim(), iniciais: gerarIniciais(match[1].trim()) }
+          }
+          return { nome, municipio: '', iniciais: gerarIniciais(nome) }
+        })
+        setListaProfissionais(profissionais)
+      } catch {
+        showToast('Erro ao carregar profissionais disponíveis.', 'error')
+      } finally {
+        setCarregandoProfissionais(false)
+      }
+    }
+    carregarProfissionais()
+  }, [])
+
+  // ─── Carregar escalas quando o profissional muda ──────────────
+  useEffect(() => {
+    if (!profissionalSelecionado) {
+      setEscalas([])
+      setFormData({ dia: '', horario: '' })
+      return
+    }
+
+    const carregarEscalas = async () => {
+      setCarregandoEscalas(true)
+      try {
+        const { data, error } = await supabase
+          .from('escalas_medicas')
+          .select('*')
+          .eq('profissional', profissionalSelecionado)
+
+        if (error) throw error
+        setEscalas(data ?? [])
+      } catch {
+        showToast('Erro ao carregar agenda do profissional.', 'error')
+      } finally {
+        setCarregandoEscalas(false)
+      }
+    }
+    carregarEscalas()
+    // Limpa seleção ao trocar de profissional
+    setFormData({ dia: '', horario: '' })
+  }, [profissionalSelecionado])
+
+  // ─── Verifica se um dia está disponível na escala ─────────────
+  const isDiaDisponivel = useCallback((dataStr: string): boolean => {
+    if (!profissionalSelecionado || escalas.length === 0) return false
+    const data = new Date(dataStr + 'T00:00:00')
+    const diaSemana = data.getDay()
+    const escalasDoDia = escalas.filter(e => e.dia_semana === diaSemana)
+    if (escalasDoDia.length === 0) return false
+
+    return escalasDoDia.some(escala => {
+      if (escala.tipo_escala === 'semanal') return true
+      if (escala.tipo_escala === 'intercalada' && escala.data_base_intercalada) {
+        return isSemanaAtiva(data, escala.data_base_intercalada)
+      }
+      return false
+    })
+  }, [profissionalSelecionado, escalas])
+
+  // ─── Carregar horários disponíveis (escala - agendados) ───────
+  const carregarHorariosDisponiveis = useCallback(async (dataStr: string) => {
+    if (!profissionalSelecionado || !dataStr) {
+      setHorariosDisponiveis([])
+      return
+    }
+
+    setCarregandoHorarios(true)
+    try {
+      // Horários da escala para aquele dia da semana
+      const data = new Date(dataStr + 'T00:00:00')
+      const diaSemana = data.getDay()
+      const escalasDoDia = escalas.filter(e => e.dia_semana === diaSemana)
+
+      // Une todos os horários das escalas do dia (pode ter múltiplas regras)
+      const horariosEscala = new Set<string>()
+      escalasDoDia.forEach(e => {
+        e.horarios.forEach(h => {
+          // Normaliza para HH:MM (remove segundos se vier HH:MM:SS)
+          horariosEscala.add(h.substring(0, 5))
+        })
+      })
+
+      if (horariosEscala.size === 0) {
+        setHorariosDisponiveis([])
+        return
+      }
+
+      // Horários já agendados naquele dia para aquele profissional
+      const { data: agendados, error } = await supabase
+        .from('agendamentos')
+        .select('horario_agendamento')
+        .eq('profissional', profissionalSelecionado)
+        .eq('data_agendamento', dataStr)
+        .in('status', ['agendado', 'aguardando', 'em_atendimento'])
+
+      if (error) throw error
+
+      const horariosOcupados = new Set(
+        (agendados ?? []).map((a: { horario_agendamento: string }) =>
+          a.horario_agendamento.substring(0, 5)
+        )
+      )
+
+      // Subtrai ocupados dos disponíveis
+      const livres = [...horariosEscala]
+        .filter(h => !horariosOcupados.has(h))
+        .sort()
+
+      setHorariosDisponiveis(livres)
+    } catch {
+      showToast('Erro ao verificar horários disponíveis.', 'error')
+      setHorariosDisponiveis([])
+    } finally {
+      setCarregandoHorarios(false)
+    }
+  }, [profissionalSelecionado, escalas])
+
+  // Recarrega horários quando a data ou as escalas mudam
+  useEffect(() => {
+    if (formData.dia) {
+      carregarHorariosDisponiveis(formData.dia)
+    } else {
+      setHorariosDisponiveis([])
+    }
+  }, [formData.dia, carregarHorariosDisponiveis])
 
   // ─── Handlers ────────────────────────────────────────────────
   const handleMudarMes = (direcao: 'anterior' | 'proximo') => {
@@ -159,6 +332,11 @@ export default function AgendamentoPage() {
       direcao === 'anterior' ? d.setMonth(prev.getMonth() - 1) : d.setMonth(prev.getMonth() + 1)
       return d
     })
+  }
+
+  const handleSelecionarDia = (dataStr: string) => {
+    if (!isDiaDisponivel(dataStr)) return
+    setFormData({ ...formData, dia: dataStr, horario: '' })
   }
 
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -171,13 +349,18 @@ export default function AgendamentoPage() {
       try {
         const res  = await fetch(`https://viacep.com.br/ws/${clean}/json/`)
         const data = await res.json()
-        if (!data.erro) { setRua(data.logradouro); setBairro(data.bairro); setCidade(data.localidade); setUf(data.uf) }
+        if (!data.erro) {
+          setRua(data.logradouro)
+          setBairro(data.bairro)
+          setCidade(data.localidade)
+          setUf(data.uf)
+        }
       } catch { /* silencioso */ }
       finally { setLoadingCep(false) }
     }
   }
 
-  const verificarHorarioPassado = (horaStr: string) => {
+  const verificarHorarioPassado = (horaStr: string): boolean => {
     if (!formData.dia) return false
     const agora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
     const [ano, mes, dia] = formData.dia.split('-').map(Number)
@@ -187,11 +370,18 @@ export default function AgendamentoPage() {
 
   const handleVerificarCpf = async () => {
     const cpfLimpo = cpf.replace(/\D/g, '')
-    if (cpfLimpo.length !== 11) { showToast('Por favor, digite um CPF válido com 11 números.', 'warning'); return }
+    if (cpfLimpo.length !== 11) {
+      showToast('Por favor, digite um CPF válido com 11 números.', 'warning')
+      return
+    }
     setVerificandoCpf(true)
     try {
       const { data, error } = await supabase
-        .from('pacientes').select('nome_completo, telefone').eq('cpf', cpfLimpo).single()
+        .from('pacientes')
+        .select('nome_completo, telefone')
+        .eq('cpf', cpfLimpo)
+        .single()
+
       if (data) {
         setNomeCompleto(data.nome_completo || 'Paciente')
         setStatusPaciente('existente')
@@ -212,9 +402,15 @@ export default function AgendamentoPage() {
   }
 
   const handleAvancar = async () => {
-    if (statusPaciente === 'pendente') { showToast('Por favor, identifique-se com o seu CPF primeiro.', 'warning'); return }
-    if (!profissionalSelecionado)      { showToast('Por favor, selecione o profissional e município de atendimento.', 'warning'); return }
-    if (!formData.dia || !formData.horario) { showToast('Selecione uma data e um horário no calendário para continuar.', 'warning'); return }
+    if (statusPaciente === 'pendente') {
+      showToast('Por favor, identifique-se com o seu CPF primeiro.', 'warning'); return
+    }
+    if (!profissionalSelecionado) {
+      showToast('Por favor, selecione o profissional e município de atendimento.', 'warning'); return
+    }
+    if (!formData.dia || !formData.horario) {
+      showToast('Selecione uma data e um horário no calendário para continuar.', 'warning'); return
+    }
     if (statusPaciente === 'novo') {
       if (!nomeCompleto || !dataNascimento || !cns || !telefone || !rua || !numero || !bairro || !cidade || !uf) {
         showToast('Preencha todos os campos obrigatórios (*) marcados.', 'warning'); return
@@ -226,12 +422,24 @@ export default function AgendamentoPage() {
     try {
       if (statusPaciente === 'novo') {
         const { error: ep } = await supabase.from('pacientes').insert([{
-          cpf: cpfLimpo, nome_completo: nomeCompleto, nome_social: nomeSocial,
-          cns, data_nascimento: dataNascimento, telefone: telefone.replace(/\D/g, ''),
-          identidade_genero: identidadeGenero, orientacao_sexual: orientacaoSexual,
-          nacionalidade, nome_mae: motherNotDeclared ? 'Não declarado' : nomeMae,
+          cpf: cpfLimpo,
+          nome_completo: nomeCompleto,
+          nome_social: nomeSocial,
+          cns,
+          data_nascimento: dataNascimento,
+          telefone: telefone.replace(/\D/g, ''),
+          identidade_genero: identidadeGenero,
+          orientacao_sexual: orientacaoSexual,
+          nacionalidade,
+          nome_mae: motherNotDeclared ? 'Não declarado' : nomeMae,
           nome_pai: fatherNotDeclared ? 'Não declarado' : nomePai,
-          cep: cep.replace(/\D/g, ''), logradouro: rua, numero, complemento, bairro, cidade, uf,
+          cep: cep.replace(/\D/g, ''),
+          logradouro: rua,
+          numero,
+          complemento,
+          bairro,
+          cidade,
+          uf,
         }])
         if (ep) throw ep
       }
@@ -239,24 +447,32 @@ export default function AgendamentoPage() {
       const { error: ea } = await supabase.from('agendamentos').insert([{
         paciente_cpf: cpfLimpo,
         data_agendamento: formData.dia,
+        // Garante formato HH:MM:SS exigido pelo banco
         horario_agendamento: `${formData.horario}:00`,
         profissional: profissionalSelecionado,
-        status: 'pendente',
+        // Status inicial correto conforme enum do sistema
+        status: 'agendado',
       }])
-      if (ea) throw ea
-
-      // 🔥 CORREÇÃO AQUI: Verifica a sessão em TEMPO REAL ignorando o state do React
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (!session) {
-        // Só salva o token se a sessão for NULA (ou seja, é um paciente comum agendando de casa)
-        localStorage.setItem('meu_token_paciente', cpfLimpo) 
+      if (ea) {
+        // Captura violação de UNIQUE (double-booking)
+        if ((ea as any).code === '23505') {
+          showToast('Este horário acabou de ser reservado por outro paciente. Por favor, escolha outro.', 'warning')
+          // Recarrega os horários para refletir a mudança
+          await carregarHorariosDisponiveis(formData.dia)
+          setFormData({ ...formData, horario: '' })
+          return
+        }
+        throw ea
       }
 
-      // Restante da sua lógica original de sucesso...
+      // Salva token no localStorage apenas para pacientes (não staff autenticado)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        localStorage.setItem('meu_token_paciente', cpfLimpo)
+      }
+
       setProtocolo(`#AGD-${Math.floor(Math.random() * 9000) + 1000}`)
       setMostrarConfirmacao(true)
-
     } catch (error) {
       showToast('Ocorreu um erro ao salvar o agendamento. Tente novamente.', 'error')
       console.error(error)
@@ -266,11 +482,28 @@ export default function AgendamentoPage() {
   }
 
   const resetarFormulario = () => {
-    setStatusPaciente('pendente'); setCpf(''); setNomeCompleto(''); setNomeSocial('')
-    setCns(''); setDataNascimento(''); setTelefone(''); setCep(''); setRua(''); setNumero('')
-    setBairro(''); setCidade(''); setUf(''); setComplemento(''); setNomeMae(''); setNomePai('')
-    setMotherNotDeclared(false); setFatherNotDeclared(false)
-    setProfissionalSelecionado(''); setFormData({ dia: '', horario: '' })
+    setStatusPaciente('pendente')
+    setCpf('')
+    setNomeCompleto('')
+    setNomeSocial('')
+    setCns('')
+    setDataNascimento('')
+    setTelefone('')
+    setCep('')
+    setRua('')
+    setNumero('')
+    setBairro('')
+    setCidade('')
+    setUf('')
+    setComplemento('')
+    setNomeMae('')
+    setNomePai('')
+    setMotherNotDeclared(false)
+    setFatherNotDeclared(false)
+    setProfissionalSelecionado('')
+    setEscalas([])
+    setHorariosDisponiveis([])
+    setFormData({ dia: '', horario: '' })
   }
 
   const handleFecharConfirmacaoEVoltar = () => {
@@ -280,8 +513,6 @@ export default function AgendamentoPage() {
   }
 
   const dataFormatada = formData.dia ? formData.dia.split('-').reverse().join('/') : ''
-
-  // Passo atual para a barra de progresso
   const passo = mostrarConfirmacao ? 3 : statusPaciente !== 'pendente' ? 2 : 1
 
   // ─── Render ───────────────────────────────────────────────────
@@ -296,10 +527,10 @@ export default function AgendamentoPage() {
             toast.type === 'info'    ? 'bg-sky-50/95 border-sky-200 text-sky-800' :
             'bg-amber-50/95 border-amber-200 text-amber-800'
           }`}>
-            {toast.type === 'error'   && <XCircle      size={18} className="shrink-0 text-red-500" />}
-            {toast.type === 'warning' && <AlertTriangle size={18} className="shrink-0 text-amber-500" />}
-            {toast.type === 'success' && <CheckCircle2  size={18} className="shrink-0 text-green-500" />}
-            {toast.type === 'info'    && <Info          size={18} className="shrink-0 text-sky-500" />}
+            {toast.type === 'error'   && <XCircle       size={18} className="shrink-0 text-red-500" />}
+            {toast.type === 'warning' && <AlertTriangle  size={18} className="shrink-0 text-amber-500" />}
+            {toast.type === 'success' && <CheckCircle2   size={18} className="shrink-0 text-green-500" />}
+            {toast.type === 'info'    && <Info            size={18} className="shrink-0 text-sky-500" />}
             <p>{toast.message}</p>
           </div>
         </div>
@@ -339,9 +570,7 @@ export default function AgendamentoPage() {
               <div key={n} className="flex items-center">
                 <div className="flex items-center gap-2">
                   <div className={stepNumCls(state)} style={stepNumStyle(state)}>
-                    {state === 'done'
-                      ? <Check size={12} strokeWidth={3} />
-                      : n}
+                    {state === 'done' ? <Check size={12} strokeWidth={3} /> : n}
                   </div>
                   <span
                     className="text-xs font-semibold font-heading hidden sm:block whitespace-nowrap"
@@ -376,7 +605,6 @@ export default function AgendamentoPage() {
                 Identificação do Paciente
               </h2>
 
-              {/* Pendente */}
               {statusPaciente === 'pendente' && (
                 <div className="space-y-4 animate-in fade-in duration-200">
                   <div>
@@ -396,6 +624,7 @@ export default function AgendamentoPage() {
                             else if (v.length > 3) v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2')
                             setCpf(v)
                           }}
+                          onKeyDown={e => e.key === 'Enter' && handleVerificarCpf()}
                           className="w-full pl-9 pr-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                           style={{ borderColor: C.gray200 }}
                           onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 3px ${C.pink50}` }}
@@ -420,7 +649,6 @@ export default function AgendamentoPage() {
                 </div>
               )}
 
-              {/* Paciente existente */}
               {statusPaciente === 'existente' && (
                 <div className="space-y-3 animate-in slide-in-from-bottom-2 fade-in duration-300">
                   <div className="flex items-start gap-3 p-4 rounded-xl border" style={{ background: C.pink50, borderColor: C.pink100 }}>
@@ -432,7 +660,10 @@ export default function AgendamentoPage() {
                       </p>
                     </div>
                   </div>
-                  <button onClick={resetarFormulario} className="flex items-center gap-1.5 text-xs font-medium transition-colors" style={{ color: C.gray400 }}
+                  <button
+                    onClick={resetarFormulario}
+                    className="flex items-center gap-1.5 text-xs font-medium transition-colors"
+                    style={{ color: C.gray400 }}
                     onMouseEnter={e => e.currentTarget.style.color = C.pink600}
                     onMouseLeave={e => e.currentTarget.style.color = C.gray400}
                   >
@@ -441,7 +672,6 @@ export default function AgendamentoPage() {
                 </div>
               )}
 
-              {/* Paciente novo */}
               {statusPaciente === 'novo' && (
                 <div className="space-y-3 animate-in slide-in-from-bottom-2 fade-in duration-300">
                   <div className="flex items-start gap-3 p-4 rounded-xl border" style={{ background: '#EFF6FF', borderColor: '#BFDBFE' }}>
@@ -451,7 +681,10 @@ export default function AgendamentoPage() {
                       <p className="text-sm text-blue-700">CPF não encontrado. Preencha a ficha abaixo para criar o cadastro.</p>
                     </div>
                   </div>
-                  <button onClick={resetarFormulario} className="flex items-center gap-1.5 text-xs font-medium transition-colors" style={{ color: C.gray400 }}
+                  <button
+                    onClick={resetarFormulario}
+                    className="flex items-center gap-1.5 text-xs font-medium transition-colors"
+                    style={{ color: C.gray400 }}
                     onMouseEnter={e => e.currentTarget.style.color = C.pink600}
                     onMouseLeave={e => e.currentTarget.style.color = C.gray400}
                   >
@@ -471,7 +704,6 @@ export default function AgendamentoPage() {
                   Dados Pessoais
                 </h2>
 
-                {/* Informações básicas */}
                 <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: C.gray400 }}>
                   Informações básicas
                 </p>
@@ -487,9 +719,7 @@ export default function AgendamentoPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
-                      Nome Social
-                    </label>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>Nome Social</label>
                     <input type="text" value={nomeSocial} onChange={e => setNomeSocial(e.target.value)}
                       placeholder="Como prefere ser chamado"
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
@@ -500,15 +730,14 @@ export default function AgendamentoPage() {
                     <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
                       Data de nasc. <span style={{ color: C.pink600 }}>*</span>
                     </label>
-                    <input type="date" required max={new Date().toISOString().split('T')[0]} value={dataNascimento} onChange={e => setDataNascimento(e.target.value)}
+                    <input type="date" required max={new Date().toISOString().split('T')[0]}
+                      value={dataNascimento} onChange={e => setDataNascimento(e.target.value)}
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all text-gray-700"
                       style={{ borderColor: C.gray200 }}
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
-                      Nacionalidade
-                    </label>
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>Nacionalidade</label>
                     <input type="text" value={nacionalidade} onChange={e => setNacionalidade(e.target.value)}
                       placeholder="Ex: Brasileira"
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
@@ -519,7 +748,8 @@ export default function AgendamentoPage() {
                     <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
                       CNS — Cartão Nacional de Saúde <span style={{ color: C.pink600 }}>*</span>
                     </label>
-                    <input type="text" required maxLength={15} value={cns} onChange={e => setCns(e.target.value.replace(/\D/g, ''))}
+                    <input type="text" required maxLength={15} value={cns}
+                      onChange={e => setCns(e.target.value.replace(/\D/g, ''))}
                       placeholder="000 0000 0000 0000"
                       className="w-full md:w-1/2 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all font-mono"
                       style={{ borderColor: C.gray200 }}
@@ -527,56 +757,67 @@ export default function AgendamentoPage() {
                   </div>
                 </div>
 
-                {/* Identidade e Orientação */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
                   <div>
                     <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>Identidade de Gênero</label>
                     <input type="text" value={identidadeGenero} onChange={e => setIdentidadeGenero(e.target.value)}
                       placeholder="Ex: Mulher Cis, Homem Trans..."
-                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none" style={{ borderColor: C.gray200 }}
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none"
+                      style={{ borderColor: C.gray200 }}
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>Orientação Sexual</label>
                     <input type="text" value={orientacaoSexual} onChange={e => setOrientacaoSexual(e.target.value)}
                       placeholder="Ex: Heterossexual, Lésbica..."
-                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none" style={{ borderColor: C.gray200 }}
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none"
+                      style={{ borderColor: C.gray200 }}
                     />
                   </div>
                 </div>
 
-                {/* Filiação */}
                 <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: C.gray400 }}>Filiação</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
                   <div>
                     <div className="flex justify-between items-center mb-1.5">
                       <label className="text-xs font-semibold" style={{ color: C.gray600 }}>Nome da Mãe</label>
                       <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
-                        <input type="checkbox" checked={motherNotDeclared} onChange={e => setMotherNotDeclared(e.target.checked)} className="rounded text-pink-600" />
+                        <input type="checkbox" checked={motherNotDeclared}
+                          onChange={e => setMotherNotDeclared(e.target.checked)}
+                          className="rounded text-pink-600"
+                        />
                         Não declarado
                       </label>
                     </div>
-                    <input type="text" disabled={motherNotDeclared} value={motherNotDeclared ? '' : nomeMae} onChange={e => setNomeMae(e.target.value)}
-                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none disabled:bg-gray-50 opacity-100" style={{ borderColor: C.gray200 }}
+                    <input type="text" disabled={motherNotDeclared}
+                      value={motherNotDeclared ? '' : nomeMae}
+                      onChange={e => setNomeMae(e.target.value)}
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none disabled:bg-gray-50"
+                      style={{ borderColor: C.gray200 }}
                     />
                   </div>
                   <div>
                     <div className="flex justify-between items-center mb-1.5">
                       <label className="text-xs font-semibold" style={{ color: C.gray600 }}>Nome do Pai</label>
                       <label className="flex items-center gap-1.5 text-[10px] cursor-pointer">
-                        <input type="checkbox" checked={fatherNotDeclared} onChange={e => setFatherNotDeclared(e.target.checked)} className="rounded text-pink-600" />
+                        <input type="checkbox" checked={fatherNotDeclared}
+                          onChange={e => setFatherNotDeclared(e.target.checked)}
+                          className="rounded text-pink-600"
+                        />
                         Não declarado
                       </label>
                     </div>
-                    <input type="text" disabled={fatherNotDeclared} value={fatherNotDeclared ? '' : nomePai} onChange={e => setNomePai(e.target.value)}
-                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none disabled:bg-gray-50" style={{ borderColor: C.gray200 }}
+                    <input type="text" disabled={fatherNotDeclared}
+                      value={fatherNotDeclared ? '' : nomePai}
+                      onChange={e => setNomePai(e.target.value)}
+                      className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none disabled:bg-gray-50"
+                      style={{ borderColor: C.gray200 }}
                     />
                   </div>
                 </div>
 
                 <div className="border-t border-gray-100 mb-5" />
 
-                {/* Contato e endereço */}
                 <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: C.gray400 }}>
                   Contato e endereço
                 </p>
@@ -585,11 +826,8 @@ export default function AgendamentoPage() {
                     <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
                       Telefone <span style={{ color: C.pink600 }}>*</span>
                     </label>
-                    <input 
-                      type="tel" 
-                      required 
-                      value={telefone} 
-                      onChange={e => setTelefone(formatarTelefone(e.target.value))} 
+                    <input type="tel" required value={telefone}
+                      onChange={e => setTelefone(formatarTelefone(e.target.value))}
                       placeholder="(00) 00000-0000"
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                       style={{ borderColor: C.gray200 }}
@@ -599,9 +837,11 @@ export default function AgendamentoPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
-                      CEP {loadingCep && <Loader2 size={11} className="inline animate-spin ml-1" />} <span style={{ color: C.pink600 }}>*</span>
+                      CEP {loadingCep && <Loader2 size={11} className="inline animate-spin ml-1" />}
+                      <span style={{ color: C.pink600 }}> *</span>
                     </label>
-                    <input type="text" required maxLength={9} value={cep} onChange={handleCepChange} placeholder="00000-000"
+                    <input type="text" required maxLength={9} value={cep} onChange={handleCepChange}
+                      placeholder="00000-000"
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                       style={{ borderColor: C.gray200 }}
                     />
@@ -611,36 +851,41 @@ export default function AgendamentoPage() {
                       Rua e número <span style={{ color: C.pink600 }}>*</span>
                     </label>
                     <div className="flex gap-2">
-                      <input type="text" required value={rua} onChange={e => setRua(e.target.value)} placeholder="Logradouro"
+                      <input type="text" required value={rua} onChange={e => setRua(e.target.value)}
+                        placeholder="Logradouro"
                         className="flex-1 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                         style={{ borderColor: C.gray200 }}
                       />
-                      <input type="text" required value={numero} onChange={e => setNumero(e.target.value)} placeholder="Nº"
+                      <input type="text" required value={numero} onChange={e => setNumero(e.target.value)}
+                        placeholder="Nº"
                         className="w-20 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all text-center"
                         style={{ borderColor: C.gray200 }}
                       />
                     </div>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>
-                      Complemento
-                    </label>
-                    <input type="text" value={complemento} onChange={e => setComplemento(e.target.value)} placeholder="Apto, Bloco, Casa..."
+                    <label className="block text-xs font-semibold mb-1.5" style={{ color: C.gray600 }}>Complemento</label>
+                    <input type="text" value={complemento} onChange={e => setComplemento(e.target.value)}
+                      placeholder="Apto, Bloco, Casa..."
                       className="w-full px-3 py-2.5 border rounded-xl text-sm outline-none"
                       style={{ borderColor: C.gray200 }}
                     />
                   </div>
                   <div className="md:col-span-2">
                     <div className="flex gap-2">
-                      <input type="text" required value={bairro} onChange={e => setBairro(e.target.value)} placeholder="Bairro"
+                      <input type="text" required value={bairro} onChange={e => setBairro(e.target.value)}
+                        placeholder="Bairro"
                         className="flex-1 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                         style={{ borderColor: C.gray200 }}
                       />
-                      <input type="text" required value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Cidade"
+                      <input type="text" required value={cidade} onChange={e => setCidade(e.target.value)}
+                        placeholder="Cidade"
                         className="flex-1 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all"
                         style={{ borderColor: C.gray200 }}
                       />
-                      <input type="text" required value={uf} onChange={e => setUf(e.target.value.toUpperCase())} placeholder="UF"
+                      <input type="text" required value={uf}
+                        onChange={e => setUf(e.target.value.toUpperCase())}
+                        placeholder="UF"
                         className="w-16 px-3 py-2.5 border rounded-xl text-sm outline-none transition-all text-center uppercase"
                         style={{ borderColor: C.gray200 }}
                       />
@@ -663,48 +908,66 @@ export default function AgendamentoPage() {
                   Selecione a unidade ou o profissional desejado.
                 </p>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {LISTA_PROFISSIONAIS.map(prof => {
-                    const fullName = `${prof.nome} (${prof.municipio})`
-                    const selected = profissionalSelecionado === fullName
-                    return (
-                      <button
-                        key={prof.nome}
-                        onClick={() => setProfissionalSelecionado(fullName)}
-                        className="flex flex-col items-center gap-2.5 p-4 rounded-xl border text-center transition-all duration-150 cursor-pointer"
-                        style={{
-                          borderColor: selected ? C.pink400 : C.gray200,
-                          background:  selected ? C.pink50  : '#fff',
-                          boxShadow:   selected ? `0 0 0 2px ${C.pink200}` : 'none',
-                        }}
-                      >
-                        {/* Avatar */}
-                        <div
-                          className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold font-heading shrink-0"
+                {carregandoProfissionais ? (
+                  <div className="flex items-center justify-center py-8 gap-2" style={{ color: C.gray400 }}>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span className="text-sm">Carregando profissionais...</span>
+                  </div>
+                ) : listaProfissionais.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed" style={{ borderColor: C.gray200 }}>
+                    <Stethoscope size={28} className="mb-2" style={{ color: C.gray200 }} />
+                    <p className="text-sm font-medium" style={{ color: C.gray400 }}>Nenhum profissional disponível</p>
+                    <p className="text-xs mt-0.5" style={{ color: C.gray200 }}>Verifique as escalas cadastradas</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {listaProfissionais.map(prof => {
+                      // Reconstrói o nome completo no mesmo formato salvo no banco
+                      const nomeCompleto = prof.municipio
+                        ? `${prof.nome} (${prof.municipio})`
+                        : prof.nome
+                      const selected = profissionalSelecionado === nomeCompleto
+                      return (
+                        <button
+                          key={nomeCompleto}
+                          onClick={() => setProfissionalSelecionado(nomeCompleto)}
+                          className="flex flex-col items-center gap-2.5 p-4 rounded-xl border text-center transition-all duration-150 cursor-pointer"
                           style={{
-                            background: selected ? C.pink400 : C.gray100,
-                            color:      selected ? '#fff'    : C.gray600,
+                            borderColor: selected ? C.pink400 : C.gray200,
+                            background:  selected ? C.pink50  : '#fff',
+                            boxShadow:   selected ? `0 0 0 2px ${C.pink200}` : 'none',
                           }}
                         >
-                          {prof.iniciais}
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold font-heading" style={{ color: selected ? C.pink800 : C.gray800 }}>
-                            {prof.nome}
-                          </p>
-                          <p className="text-xs" style={{ color: selected ? C.pink600 : C.gray400 }}>
-                            {prof.municipio}
-                          </p>
-                        </div>
-                        {selected && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: C.pink100, color: C.pink800 }}>
-                            <Check size={10} strokeWidth={3} /> Selecionado
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
+                          <div
+                            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold font-heading shrink-0"
+                            style={{
+                              background: selected ? C.pink400 : C.gray100,
+                              color:      selected ? '#fff'    : C.gray600,
+                            }}
+                          >
+                            {prof.iniciais}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold font-heading" style={{ color: selected ? C.pink800 : C.gray800 }}>
+                              {prof.nome}
+                            </p>
+                            {prof.municipio && (
+                              <p className="text-xs" style={{ color: selected ? C.pink600 : C.gray400 }}>
+                                {prof.municipio}
+                              </p>
+                            )}
+                          </div>
+                          {selected && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
+                              style={{ background: C.pink100, color: C.pink800 }}>
+                              <Check size={10} strokeWidth={3} /> Selecionado
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
@@ -716,115 +979,185 @@ export default function AgendamentoPage() {
                     <CalendarDays size={16} style={{ color: C.pink600 }} />
                   </span>
                   Data e Horário
+                  {carregandoEscalas && (
+                    <Loader2 size={14} className="animate-spin ml-auto" style={{ color: C.gray400 }} />
+                  )}
                 </h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Calendário */}
-                  <div>
-                    <div className="flex justify-between items-center mb-4 px-1">
-                      <button
-                        onClick={() => handleMudarMes('anterior')}
-                        className="w-8 h-8 rounded-xl border flex items-center justify-center transition-all"
-                        style={{ borderColor: C.gray200, color: C.gray600 }}
-                        onMouseEnter={e => { e.currentTarget.style.background = C.pink50; e.currentTarget.style.borderColor = C.pink200; e.currentTarget.style.color = C.pink600 }}
-                        onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.color = C.gray600 }}
-                      >
-                        <ChevronLeft size={15} />
-                      </button>
-                      <h3 className="font-heading font-semibold text-sm capitalize" style={{ color: C.gray800 }}>
-                        {MESES[currentMonth]} {currentYear}
-                      </h3>
-                      <button
-                        onClick={() => handleMudarMes('proximo')}
-                        className="w-8 h-8 rounded-xl border flex items-center justify-center transition-all"
-                        style={{ borderColor: C.gray200, color: C.gray600 }}
-                        onMouseEnter={e => { e.currentTarget.style.background = C.pink50; e.currentTarget.style.borderColor = C.pink200; e.currentTarget.style.color = C.pink600 }}
-                        onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.color = C.gray600 }}
-                      >
-                        <ChevronRight size={15} />
-                      </button>
-                    </div>
-
-                    {/* Cabeçalho dias */}
-                    <div className="grid grid-cols-7 text-center mb-1">
-                      {['D','S','T','Q','Q','S','S'].map((d, i) => (
-                        <div key={i} className="text-xs font-bold py-1" style={{ color: C.gray400 }}>{d}</div>
-                      ))}
-                    </div>
-
-                    {/* Grid dias */}
-                    <div className="grid grid-cols-7 gap-0.5">
-                      {espacosVazios.map((_, i) => <div key={`e-${i}`} />)}
-                      {dias.map(dia => {
-                        const dataStr = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
-                        const isSel   = formData.dia === dataStr
-                        const hoje    = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-                        hoje.setHours(0,0,0,0)
-                        const isPast  = new Date(currentYear, currentMonth, dia) < hoje
-                        return (
-                          <button
-                            key={dia}
-                            onClick={() => !isPast && setFormData({ ...formData, dia: dataStr, horario: '' })}
-                            disabled={isPast}
-                            className="h-9 flex items-center justify-center rounded-xl text-sm transition-all duration-150"
-                            style={{
-                              background: isSel ? C.pink600 : 'transparent',
-                              color:      isSel ? '#fff' : isPast ? C.gray200 : C.gray800,
-                              fontWeight: isSel ? 700 : 400,
-                              cursor:     isPast ? 'not-allowed' : 'pointer',
-                              opacity:    isPast ? 0.4 : 1,
-                            }}
-                            onMouseEnter={e => { if (!isPast && !isSel) { e.currentTarget.style.background = C.pink50; e.currentTarget.style.color = C.pink600 } }}
-                            onMouseLeave={e => { if (!isPast && !isSel) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = C.gray800 } }}
-                          >
-                            {dia}
-                          </button>
-                        )
-                      })}
-                    </div>
+                {/* Aviso quando nenhum profissional selecionado */}
+                {!profissionalSelecionado && (
+                  <div className="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed" style={{ borderColor: C.gray200 }}>
+                    <Stethoscope size={28} className="mb-2" style={{ color: C.gray200 }} />
+                    <p className="text-sm font-medium" style={{ color: C.gray400 }}>Selecione um profissional acima</p>
+                    <p className="text-xs mt-0.5" style={{ color: C.gray200 }}>para ver as datas disponíveis</p>
                   </div>
+                )}
 
-                  {/* Horários */}
-                  <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-6 md:pt-0 md:pl-8">
-                    <h3 className="flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase mb-4" style={{ color: C.gray400 }}>
-                      <Clock size={13} style={{ color: C.pink400 }} /> Horários disponíveis
-                    </h3>
+                {profissionalSelecionado && !carregandoEscalas && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Calendário */}
+                    <div>
+                      <div className="flex justify-between items-center mb-4 px-1">
+                        <button
+                          onClick={() => handleMudarMes('anterior')}
+                          className="w-8 h-8 rounded-xl border flex items-center justify-center transition-all"
+                          style={{ borderColor: C.gray200, color: C.gray600 }}
+                          onMouseEnter={e => { e.currentTarget.style.background = C.pink50; e.currentTarget.style.borderColor = C.pink200; e.currentTarget.style.color = C.pink600 }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.color = C.gray600 }}
+                        >
+                          <ChevronLeft size={15} />
+                        </button>
+                        <h3 className="font-heading font-semibold text-sm capitalize" style={{ color: C.gray800 }}>
+                          {MESES[currentMonth]} {currentYear}
+                        </h3>
+                        <button
+                          onClick={() => handleMudarMes('proximo')}
+                          className="w-8 h-8 rounded-xl border flex items-center justify-center transition-all"
+                          style={{ borderColor: C.gray200, color: C.gray600 }}
+                          onMouseEnter={e => { e.currentTarget.style.background = C.pink50; e.currentTarget.style.borderColor = C.pink200; e.currentTarget.style.color = C.pink600 }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.color = C.gray600 }}
+                        >
+                          <ChevronRight size={15} />
+                        </button>
+                      </div>
 
-                    {formData.dia ? (
-                      <div className="grid grid-cols-2 gap-2 animate-in fade-in zoom-in-95 duration-200">
-                        {HORARIOS.map(hora => {
-                          const isPassado = verificarHorarioPassado(hora)
-                          const isSel     = formData.horario === hora
+                      <div className="grid grid-cols-7 text-center mb-1">
+                        {['D','S','T','Q','Q','S','S'].map((d, i) => (
+                          <div key={i} className="text-xs font-bold py-1" style={{ color: C.gray400 }}>{d}</div>
+                        ))}
+                      </div>
+
+                      <div className="grid grid-cols-7 gap-0.5">
+                        {espacosVazios.map((_, i) => <div key={`e-${i}`} />)}
+                        {dias.map(dia => {
+                          const dataStr = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
+                          const isSel   = formData.dia === dataStr
+                          const hoje    = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+                          hoje.setHours(0, 0, 0, 0)
+                          const isPast  = new Date(currentYear, currentMonth, dia) < hoje
+                          // Disponível se tiver escala e não for passado
+                          const isDisp  = !isPast && isDiaDisponivel(dataStr)
+                          const isBlocked = !isPast && !isDisp
+
                           return (
                             <button
-                              key={hora}
-                              disabled={isPassado}
-                              onClick={() => setFormData({ ...formData, horario: hora })}
-                              className="py-3 rounded-xl text-sm font-medium border transition-all duration-150"
+                              key={dia}
+                              onClick={() => isDisp && handleSelecionarDia(dataStr)}
+                              disabled={!isDisp}
+                              title={isBlocked ? 'Sem atendimento neste dia' : undefined}
+                              className="h-9 flex items-center justify-center rounded-xl text-sm transition-all duration-150 relative"
                               style={{
-                                borderColor: isSel ? C.pink600 : C.gray200,
-                                background:  isSel ? C.pink600 : '#fff',
-                                color:       isSel ? '#fff' : isPassado ? C.gray200 : C.gray600,
-                                opacity:     isPassado ? 0.4 : 1,
-                                cursor:      isPassado ? 'not-allowed' : 'pointer',
+                                background: isSel ? C.pink600 : 'transparent',
+                                color:      isSel ? '#fff'
+                                          : isPast || isBlocked ? C.gray400
+                                          : C.gray800,
+                                fontWeight: isSel ? 700 : 400,
+                                cursor:     isDisp ? 'pointer' : 'not-allowed',
+                                opacity:    isPast ? 0.3 : isBlocked ? 0.5 : 1,
+                                // Sublinha sutil nos dias disponíveis
+                                textDecoration: isDisp && !isSel ? 'underline' : 'none',
+                                textDecorationColor: C.pink200,
+                                textUnderlineOffset: '3px',
                               }}
-                              onMouseEnter={e => { if (!isPassado && !isSel) { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.color = C.pink600; e.currentTarget.style.background = C.pink50 } }}
-                              onMouseLeave={e => { if (!isPassado && !isSel) { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.color = C.gray600; e.currentTarget.style.background = '#fff' } }}
+                              onMouseEnter={e => {
+                                if (isDisp && !isSel) {
+                                  e.currentTarget.style.background = C.pink50
+                                  e.currentTarget.style.color = C.pink600
+                                }
+                              }}
+                              onMouseLeave={e => {
+                                if (isDisp && !isSel) {
+                                  e.currentTarget.style.background = 'transparent'
+                                  e.currentTarget.style.color = C.gray800
+                                }
+                              }}
                             >
-                              {hora}
+                              {dia}
                             </button>
                           )
                         })}
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-center py-10 rounded-xl border-2 border-dashed" style={{ borderColor: C.gray200 }}>
-                        <CalendarDays size={28} className="mb-2" style={{ color: C.gray200 }} />
-                        <p className="text-sm font-medium" style={{ color: C.gray400 }}>Selecione uma data ao lado</p>
-                        <p className="text-xs mt-0.5" style={{ color: C.gray200 }}>para ver os horários disponíveis</p>
+
+                      {/* Legenda */}
+                      <div className="flex items-center gap-4 mt-4 text-xs" style={{ color: C.gray400 }}>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded-sm inline-block" style={{ background: C.pink600 }} />
+                          Selecionado
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-3 h-3 rounded-sm inline-block border" style={{ borderColor: C.gray200 }} />
+                          Sem agenda
+                        </span>
                       </div>
-                    )}
+                    </div>
+
+                    {/* Horários */}
+                    <div className="border-t md:border-t-0 md:border-l border-gray-100 pt-6 md:pt-0 md:pl-8">
+                      <h3 className="flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase mb-4" style={{ color: C.gray400 }}>
+                        <Clock size={13} style={{ color: C.pink400 }} /> Horários disponíveis
+                      </h3>
+
+                      {carregandoHorarios ? (
+                        <div className="flex flex-col items-center justify-center py-10 gap-2" style={{ color: C.gray400 }}>
+                          <Loader2 size={22} className="animate-spin" style={{ color: C.pink400 }} />
+                          <p className="text-xs">Verificando vagas...</p>
+                        </div>
+                      ) : formData.dia ? (
+                        horariosDisponiveis.length > 0 ? (
+                          <div className="grid grid-cols-2 gap-2 animate-in fade-in zoom-in-95 duration-200">
+                            {horariosDisponiveis.map(hora => {
+                              const isPassado = verificarHorarioPassado(hora)
+                              const isSel     = formData.horario === hora
+                              return (
+                                <button
+                                  key={hora}
+                                  disabled={isPassado}
+                                  onClick={() => setFormData({ ...formData, horario: hora })}
+                                  className="py-3 rounded-xl text-sm font-medium border transition-all duration-150"
+                                  style={{
+                                    borderColor: isSel ? C.pink600 : C.gray200,
+                                    background:  isSel ? C.pink600 : '#fff',
+                                    color:       isSel ? '#fff' : isPassado ? C.gray200 : C.gray600,
+                                    opacity:     isPassado ? 0.4 : 1,
+                                    cursor:      isPassado ? 'not-allowed' : 'pointer',
+                                  }}
+                                  onMouseEnter={e => {
+                                    if (!isPassado && !isSel) {
+                                      e.currentTarget.style.borderColor = C.pink400
+                                      e.currentTarget.style.color = C.pink600
+                                      e.currentTarget.style.background = C.pink50
+                                    }
+                                  }}
+                                  onMouseLeave={e => {
+                                    if (!isPassado && !isSel) {
+                                      e.currentTarget.style.borderColor = C.gray200
+                                      e.currentTarget.style.color = C.gray600
+                                      e.currentTarget.style.background = '#fff'
+                                    }
+                                  }}
+                                >
+                                  {hora}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center text-center py-10 rounded-xl border-2 border-dashed" style={{ borderColor: C.gray200 }}>
+                            <Clock size={28} className="mb-2" style={{ color: C.gray200 }} />
+                            <p className="text-sm font-medium" style={{ color: C.gray400 }}>Sem vagas disponíveis</p>
+                            <p className="text-xs mt-0.5" style={{ color: C.gray200 }}>Tente outro dia</p>
+                          </div>
+                        )
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-center py-10 rounded-xl border-2 border-dashed" style={{ borderColor: C.gray200 }}>
+                          <CalendarDays size={28} className="mb-2" style={{ color: C.gray600 }} />
+                          <p className="text-sm font-medium" style={{ color: C.gray400 }}>Selecione uma data ao lado</p>
+                          <p className="text-xs mt-0.5" style={{ color: C.gray200 }}>para ver os horários disponíveis</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
@@ -839,9 +1172,20 @@ export default function AgendamentoPage() {
                 onClick={handleAvancar}
                 disabled={loading}
                 className="flex items-center gap-2 px-8 py-4 rounded-xl text-base font-bold font-heading text-white transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto justify-center"
-                style={{ background: loading ? C.gray400 : C.pink600, boxShadow: loading ? 'none' : `0 4px 20px ${C.pink200}` }}
-                onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = C.pink800; e.currentTarget.style.transform = 'translateY(-2px)' } }}
-                onMouseLeave={e => { e.currentTarget.style.background = loading ? C.gray400 : C.pink600; e.currentTarget.style.transform = 'translateY(0)' }}
+                style={{
+                  background: loading ? C.gray400 : C.pink600,
+                  boxShadow: loading ? 'none' : `0 4px 20px ${C.pink200}`,
+                }}
+                onMouseEnter={e => {
+                  if (!loading) {
+                    e.currentTarget.style.background = C.pink800
+                    e.currentTarget.style.transform = 'translateY(-2px)'
+                  }
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = loading ? C.gray400 : C.pink600
+                  e.currentTarget.style.transform = 'translateY(0)'
+                }}
               >
                 {loading
                   ? <><Loader2 size={18} className="animate-spin" /> Salvando...</>
@@ -853,7 +1197,6 @@ export default function AgendamentoPage() {
           {/* ── Sidebar ── */}
           <aside className="w-full lg:w-1/3">
             <div className="bg-white rounded-2xl shadow-soft border border-gray-100 p-5 sticky top-28 transition-all hover:shadow-md">
-              {/* Header sidebar */}
               <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-100">
                 <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: C.pink50 }}>
                   <FileText size={15} style={{ color: C.pink600 }} />
@@ -863,24 +1206,20 @@ export default function AgendamentoPage() {
 
               <div className="space-y-0">
                 {[
-                  { label: 'Paciente', value: nomeCompleto || (statusPaciente === 'pendente' ? '' : cpf) },
+                  { label: 'Paciente',   value: nomeCompleto || (statusPaciente === 'pendente' ? '' : cpf) },
                   { label: 'Local / Prof.', value: profissionalSelecionado },
-                  { label: 'Data',    value: dataFormatada },
-                  { label: 'Horário', value: formData.horario },
+                  { label: 'Data',       value: dataFormatada },
+                  { label: 'Horário',    value: formData.horario },
                 ].map(({ label, value }) => (
                   <div key={label} className="flex justify-between items-start py-2.5 border-b border-gray-50">
                     <span className="text-xs" style={{ color: C.gray400 }}>{label}</span>
-                    <span className="text-xs font-semibold text-right max-w-[55%] truncate" style={{ color: value ? C.gray800 : C.gray200 }}>
+                    <span className="text-xs font-semibold text-right max-w-[55%] truncate"
+                      style={{ color: value ? C.gray800 : C.gray200 }}>
                       {value || '—'}
                     </span>
                   </div>
                 ))}
-                <div className="flex justify-between items-center pt-2.5">
-                  <span className="text-xs" style={{ color: C.gray400 }}>Status</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold font-heading" style={{ background: C.pink50, color: C.pink800 }}>
-                    Em andamento
-                  </span>
-                </div>
+               
               </div>
             </div>
           </aside>
@@ -891,14 +1230,17 @@ export default function AgendamentoPage() {
           MODAL DE CONFIRMAÇÃO
       ══════════════════════════════════════════ */}
       {mostrarConfirmacao && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0 print:block"
-          style={{ background: 'rgba(24,24,27,0.65)', backdropFilter: 'blur(4px)' }}>
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0 print:block"
+          style={{ background: 'rgba(24,24,27,0.65)', backdropFilter: 'blur(4px)' }}
+        >
           <div className="w-full max-w-2xl my-auto animate-in zoom-in-95 duration-300 print:shadow-none">
 
-            {/* Cabeçalho verde */}
-            <div className="flex items-center justify-between p-5 rounded-t-2xl" style={{ background: C.pink50, borderBottom: `1px solid ${C.pink100}` }}>
+            <div className="flex items-center justify-between p-5 rounded-t-2xl"
+              style={{ background: C.pink50, borderBottom: `1px solid ${C.pink100}` }}>
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0" style={{ background: C.pink600 }}>
+                <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
+                  style={{ background: C.pink600 }}>
                   <Check size={26} strokeWidth={2.5} className="text-white" />
                 </div>
                 <div>
@@ -917,25 +1259,25 @@ export default function AgendamentoPage() {
               </button>
             </div>
 
-            {/* Corpo do comprovante */}
             <div className="bg-white rounded-b-2xl overflow-hidden shadow-2xl print:shadow-none">
-              {/* Faixa de cor */}
-              <div className="h-1.5 w-full print:hidden" style={{ background: `linear-gradient(90deg, ${C.pink600}, ${C.pink400})` }} />
+              <div className="h-1.5 w-full print:hidden"
+                style={{ background: `linear-gradient(90deg, ${C.pink600}, ${C.pink400})` }} />
 
               <div className="p-8">
-                {/* Número do protocolo */}
                 <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-100">
                   <div>
                     <h2 className="font-heading font-bold text-2xl" style={{ color: C.gray800 }}>Comprovante</h2>
                     <p className="text-sm" style={{ color: C.gray400 }}>Guarde este documento para o dia da consulta.</p>
                   </div>
-                  <div className="text-right px-4 py-2.5 rounded-xl border" style={{ background: C.pink50, borderColor: C.pink100 }}>
-                    <span className="block text-xs font-bold tracking-widest uppercase mb-0.5" style={{ color: C.pink400 }}>Protocolo</span>
+                  <div className="text-right px-4 py-2.5 rounded-xl border"
+                    style={{ background: C.pink50, borderColor: C.pink100 }}>
+                    <span className="block text-xs font-bold tracking-widest uppercase mb-0.5" style={{ color: C.pink400 }}>
+                      Protocolo
+                    </span>
                     <p className="font-mono text-sm font-bold" style={{ color: C.pink800 }}>{protocolo}</p>
                   </div>
                 </div>
 
-                {/* Dados */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
@@ -959,13 +1301,12 @@ export default function AgendamentoPage() {
                   </div>
                 </div>
 
-                {/* Aviso */}
-                <div className="p-3.5 rounded-xl text-xs" style={{ background: C.pink50, color: C.pink800, border: `1px solid ${C.pink100}` }}>
+                <div className="p-3.5 rounded-xl text-xs"
+                  style={{ background: C.pink50, color: C.pink800, border: `1px solid ${C.pink100}` }}>
                   Em caso de dúvidas ou necessidade de cancelamento, informe o número do protocolo ao atendimento.
                 </div>
               </div>
 
-              {/* Rodapé */}
               <div className="flex justify-end gap-3 px-8 py-5 border-t border-gray-100 print:hidden">
                 <button
                   onClick={() => window.print()}
