@@ -1206,7 +1206,7 @@ export default function AgendamentoPage() {
 
               <div className="space-y-0">
                 {[
-                  { label: 'Paciente',   value: nomeCompleto || (statusPaciente === 'pendente' ? '' : cpf) },
+                  { label: 'Paciente',   value: nomeCompleto || (statusPaciente === 'pendente' ? '' : (cpf ? cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : cpf)) },
                   { label: 'Local / Prof.', value: profissionalSelecionado },
                   { label: 'Data',       value: dataFormatada },
                   { label: 'Horário',    value: formData.horario },

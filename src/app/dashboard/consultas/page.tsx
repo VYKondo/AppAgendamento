@@ -345,7 +345,7 @@ export default function ConsultasPage() {
     const nome  = ag.paciente?.nome_completo || ''
     const busca = searchTerm.toLowerCase()
     return (
-      (nome.toLowerCase().includes(busca) || ag.paciente_cpf.includes(busca)) &&
+      (nome.toLowerCase().includes(busca) || (ag.paciente_cpf || '').includes(busca)) &&
       (statusFilter === 'todos' || ag.status === statusFilter) &&
       (profissionalFilter === 'todos' || ag.profissional === profissionalFilter)
     )
