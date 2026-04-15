@@ -42,13 +42,6 @@ type Agendamento = {
   paciente?: Paciente
 }
 
-// ── Constantes ──────────────────────────────────────────────────
-const LISTA_PROFISSIONAIS = [
-  'Gleiciane (Município A)',
-  'Carlos (Município B)',
-  'Adriana (Município C)',
-]
-
 // ── Paleta ──────────────────────────────────────────────────────
 const C = {
   pink50:  '#FDF2F8',
@@ -157,6 +150,9 @@ export default function ConsultasPage() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Profissionais carregados dinamicamente do banco
+  const [profissionais, setProfissionais] = useState<string[]>([])
+
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
   const [profissionalFilter, setProfissionalFilter] = useState('todos')
@@ -173,7 +169,19 @@ export default function ConsultasPage() {
     setToast({ message, type, id: Date.now() })
   }
 
-  useEffect(() => { verificarAcessoEBuscarDados() }, [])
+  useEffect(() => {
+    verificarAcessoEBuscarDados()
+    carregarProfissionais()
+  }, [])
+
+  const carregarProfissionais = async () => {
+    const { data } = await supabase
+      .from('escalas_medicas')
+      .select('profissional')
+    if (data) {
+      setProfissionais([...new Set(data.map(r => r.profissional))].sort())
+    }
+  }
 
   // ─── REALTIME: UPDATE (status), INSERT (novos agendamentos) e DELETE ───
   useEffect(() => {
@@ -508,7 +516,7 @@ export default function ConsultasPage() {
             onFocus={e => { e.currentTarget.style.borderColor = C.pink400; e.currentTarget.style.boxShadow = `0 0 0 4px ${C.pink50}` }}
             onBlur={e  => { e.currentTarget.style.borderColor = C.gray200; e.currentTarget.style.boxShadow = '0 1px 2px 0 rgb(0 0 0 / 0.05)' }}>
             <option value="todos">Todos os municípios</option>
-            {LISTA_PROFISSIONAIS.map(p => <option key={p} value={p}>{p}</option>)}
+            {profissionais.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
           <Filter size={14} className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: C.gray300 }} />
         </div>
@@ -737,7 +745,7 @@ export default function ConsultasPage() {
                                 className="w-full pl-9 pr-3 py-3 text-sm rounded-xl border outline-none appearance-none font-bold bg-white disabled:opacity-70 disabled:bg-gray-50"
                                 style={{ borderColor: C.gray200, color: C.gray800 }}>
                                 <option value="" disabled>Selecionar…</option>
-                                {LISTA_PROFISSIONAIS.map(p => <option key={p} value={p}>{p}</option>)}
+                                {profissionais.map(p => <option key={p} value={p}>{p}</option>)}
                               </select>
                             </div>
                           </div>
@@ -880,7 +888,7 @@ export default function ConsultasPage() {
                         className="w-full pl-9 pr-3 py-3 text-sm rounded-xl border outline-none appearance-none font-bold bg-white disabled:opacity-70 disabled:bg-gray-50"
                         style={{ borderColor: C.gray200, color: C.gray800 }}>
                         <option value="" disabled>Selecionar…</option>
-                        {LISTA_PROFISSIONAIS.map(p => <option key={p} value={p}>{p}</option>)}
+                        {profissionais.map(p => <option key={p} value={p}>{p}</option>)}
                       </select>
                     </div>
                   </div>

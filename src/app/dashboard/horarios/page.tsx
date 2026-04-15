@@ -10,13 +10,6 @@ import {
   Settings2, Calendar
 } from 'lucide-react'
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-const LISTA_PROFISSIONAIS = [
-  'Gleiciane (Município A)',
-  'Carlos (Município B)',
-  'Adriana (Município C)',
-]
-
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
   pink50:  '#FFF0F6', pink100: '#FFD6E7', pink200: '#FFADD2', pink300: '#FAA2C1',
@@ -100,12 +93,13 @@ export default function AgendaMedicaPage() {
   const [agenda, setAgenda]             = useState<Agenda>(buildAgendaVazia())
   const [saving, setSaving]             = useState(false)
   const [toast, setToast]               = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
-  
-  const [diaSelecionado, setDiaSelecionado] = useState<number>(1) 
+
+  const [diaSelecionado, setDiaSelecionado] = useState<number>(1)
   const [viewMode, setViewMode] = useState<'semana' | 'dia'>('dia')
   const [hasChanges, setHasChanges]     = useState(false)
 
-  // ─── NOVO: Estado para selecionar o profissional ───
+  // ─── Profissionais carregados dinamicamente ───
+  const [profissionais, setProfissionais] = useState<string[]>([])
   const [profissionalSelecionado, setProfissionalSelecionado] = useState<string>('')
 
   useEffect(() => {
@@ -116,9 +110,19 @@ export default function AgendaMedicaPage() {
         return
       }
       setAuthStatus('auth')
+      carregarProfissionais()
     }
     checkAuth()
   }, [router])
+
+  const carregarProfissionais = async () => {
+    const { data } = await supabase
+      .from('escalas_medicas')
+      .select('profissional')
+    if (data) {
+      setProfissionais([...new Set(data.map(r => r.profissional))].sort())
+    }
+  }
 
   // Carrega a escala sempre que mudar o profissional selecionado
   useEffect(() => {
@@ -283,8 +287,8 @@ export default function AgendaMedicaPage() {
              style={{ borderColor: C.gray200 }}
            >
              <option value="" disabled>Selecione o Profissional...</option>
-             {LISTA_PROFISSIONAIS.map(p => (
-               <option key={p} value={p}>Dr(a). {p}</option>
+             {profissionais.map(p => (
+               <option key={p} value={p}>{p}</option>
              ))}
            </select>
         </div>

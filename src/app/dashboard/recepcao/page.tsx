@@ -24,13 +24,6 @@ type Agendamento = {
   paciente?: Paciente
 }
 
-// ── Constantes ──────────────────────────────────────────────────
-const LISTA_PROFISSIONAIS = [
-  'Gleiciane (Município A)',
-  'Carlos (Município B)',
-  'Adriana (Município C)',
-]
-
 // ── Paleta ──────────────────────────────────────────────────────
 const C = {
   pink50:  '#FDF2F8', pink100: '#FCE7F3', pink200: '#F9D0E9',
@@ -45,7 +38,10 @@ const C = {
 export default function RecepcaoPage() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([])
   const [loading, setLoading] = useState(true)
-  
+
+  // Profissionais carregados dinamicamente do banco
+  const [profissionais, setProfissionais] = useState<string[]>([])
+
   // Filtros
   const [searchTerm, setSearchTerm] = useState('')
   const [profissionalFilter, setProfissionalFilter] = useState('todos')
@@ -64,9 +60,10 @@ export default function RecepcaoPage() {
   }, [toast])
 
   // Busca dados e escuta o Realtime (Atualização Automática)
-  useEffect(() => { 
-    buscarDadosFila() 
-    
+  useEffect(() => {
+    buscarDadosFila()
+    carregarProfissionais()
+
     const subscription = supabase.channel('recepcao_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' }, () => {
         buscarDadosFila()
@@ -75,6 +72,15 @@ export default function RecepcaoPage() {
 
     return () => { supabase.removeChannel(subscription) }
   }, [])
+
+  const carregarProfissionais = async () => {
+    const { data } = await supabase
+      .from('escalas_medicas')
+      .select('profissional')
+    if (data) {
+      setProfissionais([...new Set(data.map(r => r.profissional))].sort())
+    }
+  }
 
   const buscarDadosFila = async () => {
     try {
@@ -222,8 +228,8 @@ export default function RecepcaoPage() {
             style={{ borderColor: profissionalFilter !== 'todos' ? C.pink400 : C.gray200, backgroundColor: profissionalFilter !== 'todos' ? C.pink50 : '#F9FAFB' }}
           >
             <option value="todos">Todos os Profissionais</option>
-            {LISTA_PROFISSIONAIS.map(p => (
-              <option key={p} value={p}>Dr(a). {p}</option>
+            {profissionais.map(p => (
+              <option key={p} value={p}>{p}</option>
             ))}
           </select>
           <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
