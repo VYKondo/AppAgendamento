@@ -63,7 +63,7 @@ export default function MeusAgendamentosPage() {
       {/* CABEÇALHO */}
       <div className="mb-8">
         <button 
-          onClick={() => router.push('/')} 
+          onClick={() => router.push('/dashboard')}
           className="text-gray-500 hover:text-primary flex items-center gap-2 text-sm font-medium mb-4 transition-colors"
         >
           <ArrowLeft size={16} /> Voltar ao Início

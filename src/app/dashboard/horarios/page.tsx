@@ -112,7 +112,8 @@ export default function AgendaMedicaPage() {
     const checkAuth = async () => {
       const { data } = await supabase.auth.getSession()
       if (!data.session?.user) {
-        // router.push('/') // Opcional: redirecionar se não logado
+        router.push('/dashboard')
+        return
       }
       setAuthStatus('auth')
     }

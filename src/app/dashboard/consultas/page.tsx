@@ -175,28 +175,46 @@ export default function ConsultasPage() {
 
   useEffect(() => { verificarAcessoEBuscarDados() }, [])
 
-  // ─── NOVO: REALTIME FOCADO APENAS NO STATUS ───
+  // ─── REALTIME: UPDATE (status), INSERT (novos agendamentos) e DELETE ───
   useEffect(() => {
-    const subscription = supabase.channel('consultas_status_realtime')
+    const subscription = supabase.channel('consultas_realtime')
       .on(
-        'postgres_changes', 
-        { event: 'UPDATE', schema: 'public', table: 'agendamentos' }, 
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'agendamentos' },
         (payload) => {
-          // Quando o banco de dados avisa que houve um UPDATE, nós não recarregamos a página.
-          // Em vez disso, varremos a lista na memória e atualizamos SOMENTE o status daquele ID.
-          setAgendamentos((prevAgendamentos) => 
-            prevAgendamentos.map((ag) => 
-              ag.id === payload.new.id 
-                ? { ...ag, status: payload.new.status } // Substitui apenas o status
+          // Atualiza apenas o status em memória
+          setAgendamentos((prevAgendamentos) =>
+            prevAgendamentos.map((ag) =>
+              ag.id === payload.new.id
+                ? { ...ag, status: payload.new.status }
                 : ag
             )
           )
-      })
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'agendamentos' },
+        () => {
+          // Novo agendamento criado — recarrega a lista completa para trazer dados do paciente
+          verificarAcessoEBuscarDados()
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'agendamentos' },
+        (payload) => {
+          // Remove o item da lista em memória
+          setAgendamentos((prevAgendamentos) =>
+            prevAgendamentos.filter((ag) => ag.id !== payload.old.id)
+          )
+        }
+      )
       .subscribe()
 
     return () => { supabase.removeChannel(subscription) }
   }, [])
-  // ──────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────
 
   const verificarAcessoEBuscarDados = async () => {
     try {

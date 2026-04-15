@@ -120,42 +120,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ) : (
               isAuthenticated && (
                 <>
-                  <Link 
-                    href="/dashboard/consultas" 
+                  <Link
+                    href="/dashboard/consultas"
                     className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                      pathname.startsWith('/dashboard/consultas') 
-                      ? 'text-primary bg-primary/5 font-semibold' 
+                      pathname.startsWith('/dashboard/consultas')
+                      ? 'text-primary bg-primary/5 font-semibold'
                       : 'text-gray-600 hover:text-primary hover:bg-primary/5'
                     }`}
                   >
                     Consultas
                   </Link>
 
-                  {/* 👇 NOVO: Link da Recepção (Apenas Autenticados) */}
-                  <Link 
-                    href="/dashboard/recepcao" 
+                  <Link
+                    href="/dashboard/recepcao"
                     className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                      pathname.startsWith('/dashboard/recepcao') 
-                      ? 'text-primary bg-primary/5 font-semibold' 
+                      pathname.startsWith('/dashboard/recepcao')
+                      ? 'text-primary bg-primary/5 font-semibold'
                       : 'text-gray-600 hover:text-primary hover:bg-primary/5'
                     }`}
                   >
                     Recepção
                   </Link>
+
+                  <Link
+                    href="/dashboard/horarios"
+                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                      pathname.startsWith('/dashboard/horarios')
+                      ? 'text-primary bg-primary/5 font-semibold'
+                      : 'text-gray-600 hover:text-primary hover:bg-primary/5'
+                    }`}
+                  >
+                    Horários
+                  </Link>
                 </>
               )
             )}
-            
-            <Link 
-              href="/dashboard/horarios" 
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                pathname.startsWith('/dashboard/horarios') 
-                ? 'text-primary bg-primary/5 font-semibold' 
-                : 'text-gray-600 hover:text-primary hover:bg-primary/5'
-              }`}
-            >
-              Horários
-            </Link>
           </nav>
 
           {/* BOTÕES DE AÇÃO (DIREITA) */}
@@ -228,28 +227,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Início
             </Link>
             
-            <Link 
-              href="/dashboard/agendamento" 
+            <Link
+              href="/dashboard/agendamento"
               onClick={() => setIsMobileMenuOpen(false)}
               className={`p-4 rounded-xl font-medium transition-all ${
-                pathname.startsWith('/dashboard/agendamento') 
-                ? 'text-primary bg-primary/5 font-semibold' 
+                pathname.startsWith('/dashboard/agendamento')
+                ? 'text-primary bg-primary/5 font-semibold'
                 : 'text-gray-600 active:bg-gray-50'
               }`}
             >
               Agendar
-            </Link>
-
-            <Link 
-              href="/dashboard/horarios" 
-              onClick={() => setIsMobileMenuOpen(false)}
-              className={`p-4 rounded-xl font-medium transition-all ${
-                pathname.startsWith('/dashboard/horarios') 
-                ? 'text-primary bg-primary/5 font-semibold' 
-                : 'text-gray-600 active:bg-gray-50'
-              }`}
-            >
-              Horários
             </Link>
 
             {/* LINK NO MOBILE RESTRITO PARA PACIENTES */}
@@ -296,16 +283,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </Link>
 
                 {/* 👇 NOVO: Link da Recepção Mobile (Apenas Autenticados) */}
-                <Link 
-                  href="/dashboard/recepcao" 
+                <Link
+                  href="/dashboard/recepcao"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={`p-4 rounded-xl font-medium transition-all ${
-                    pathname.startsWith('/dashboard/recepcao') 
-                    ? 'text-primary bg-primary/5 font-semibold' 
+                    pathname.startsWith('/dashboard/recepcao')
+                    ? 'text-primary bg-primary/5 font-semibold'
                     : 'text-gray-600 active:bg-gray-50'
                   }`}
                 >
                   Recepção
+                </Link>
+
+                <Link
+                  href="/dashboard/horarios"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`p-4 rounded-xl font-medium transition-all ${
+                    pathname.startsWith('/dashboard/horarios')
+                    ? 'text-primary bg-primary/5 font-semibold'
+                    : 'text-gray-600 active:bg-gray-50'
+                  }`}
+                >
+                  Horários
                 </Link>
 
                 <hr className="my-4 border-gray-100" />
