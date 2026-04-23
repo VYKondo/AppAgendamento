@@ -247,7 +247,8 @@ export default function AgendamentoPage() {
       }
 
       // Normaliza horários para HH:MM
-      const horariosEscala = new Set<String>(
+      // ✅ FIX: Adicionado <string> para tipar explicitamente o Set
+      const horariosEscala = new Set<string>(
         escalaDoDia.horarios.map((h: string) => h.substring(0, 5))
       )
 
@@ -268,6 +269,7 @@ export default function AgendamentoPage() {
       )
 
       // Subtrai ocupados dos disponíveis
+      // ✅ Agora ambos os Sets são <string>, então o filter funciona
       const livres = [...horariosEscala]
         .filter(h => !horariosOcupados.has(h))
         .sort()
