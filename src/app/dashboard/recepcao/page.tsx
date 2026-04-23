@@ -6,6 +6,7 @@ import {
   Search, CheckCircle2, Clock, CalendarDays,
   UserX, AlertTriangle, XCircle, Info, Stethoscope, User, ChevronDown
 } from 'lucide-react'
+import { C } from '@/styles/palette'
 
 // ── Tipagens ────────────────────────────────────────────────────
 type Paciente = {
@@ -22,17 +23,6 @@ type Agendamento = {
   status: string
   profissional: string | null
   paciente?: Paciente
-}
-
-// ── Paleta ──────────────────────────────────────────────────────
-const C = {
-  pink50:  '#FDF2F8', pink100: '#FCE7F3', pink200: '#F9D0E9',
-  pink300: '#F5A6D5', pink400: '#E84393', pink500: '#D63D8A',
-  pink600: '#C2185B', pink700: '#AD1457',
-  gray50:  '#FAFAFA', gray100: '#F4F4F5', gray200: '#E4E4E7',
-  gray300: '#D1D5DB', gray400: '#A1A1AA', gray500: '#71717A',
-  gray600: '#52525B', gray700: '#3F3F46', gray800: '#18181B',
-  white:   '#FFFFFF',
 }
 
 export default function RecepcaoPage() {
@@ -84,7 +74,7 @@ export default function RecepcaoPage() {
 
   const buscarDadosFila = async () => {
     try {
-      const hoje = new Date().toISOString().split('T')[0] // Garante que foca na fila de hoje
+      const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/').reverse().join('-') 
       
       const { data: agendamentosData, error } = await supabase
         .from('agendamentos')

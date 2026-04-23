@@ -4,24 +4,7 @@ import {
   Activity, Network, Microscope, HeartHandshake,
   CalendarCheck, Phone, ChevronRight, Ribbon
 } from 'lucide-react'
-
-// ── Paleta (idêntica ao restante do sistema) ─────────────────
-const C = {
-  pink50:  '#FDF0F7',
-  pink100: '#F9D0E9',
-  pink200: '#F3A1D0',
-  pink400: '#E84393',
-  pink600: '#C73280',
-  pink800: '#8B1F57',
-  gray50:  '#FAFAFA',
-  gray100: '#F4F4F5',
-  gray200: '#E4E4E7',
-  gray400: '#A1A1AA',
-  gray500: '#71717A',
-  gray600: '#52525B',
-  gray700: '#3F3F46',
-  gray800: '#18181B',
-}
+import { C } from '@/styles/palette'
 
 const INFO_CARDS = [
   {

@@ -6,6 +6,7 @@ import { Ribbon, Menu, X, LogOut } from 'lucide-react'
 import PageTransition from '@/components/PageTransition'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { STORAGE_KEY_PATIENT_TOKEN } from '@/lib/storage'
 import Footer from '@/components/Footer' 
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -41,7 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Verifica se o paciente tem um token salvo toda vez que a rota mudar
   useEffect(() => {
-    const token = localStorage.getItem('meu_token_paciente')
+    const token = localStorage.getItem(STORAGE_KEY_PATIENT_TOKEN)
     setHasPatientToken(!!token)
   }, [pathname])
 
@@ -49,14 +50,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const handleLogout = async () => {
     await supabase.auth.signOut()
     // Por garantia, limpa também o token do paciente caso algo tenha ficado preso
-    localStorage.removeItem('meu_token_paciente')
+    localStorage.removeItem(STORAGE_KEY_PATIENT_TOKEN)
     setHasPatientToken(false)
     router.push('/')
   }
 
   // Função exclusiva para o PACIENTE limpar seu CPF
   const handleSairPaciente = () => {
-    localStorage.removeItem('meu_token_paciente')
+    localStorage.removeItem(STORAGE_KEY_PATIENT_TOKEN)
     setHasPatientToken(false)
     router.push('/') // Joga para a home após limpar
   }

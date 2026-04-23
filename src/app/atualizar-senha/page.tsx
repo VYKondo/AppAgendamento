@@ -3,12 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/utils/supabase/client'
+import { supabase } from '@/lib/supabase'
 import { Ribbon, Lock, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export default function AtualizarSenha() {
   const router = useRouter()
-  const supabase = createClient()
   
   // Estados do formulário
   const [senha, setSenha] = useState('')
@@ -47,7 +46,7 @@ export default function AtualizarSenha() {
     }
 
     capturarSessao()
-  }, [supabase])
+  }, [])
 
   const handleAtualizarSenha = async (e: React.FormEvent) => {
     e.preventDefault()

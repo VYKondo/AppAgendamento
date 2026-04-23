@@ -4,36 +4,22 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAgendamentoStore } from '@/store/useAgendamentoStore'
 import { supabase } from '@/lib/supabase'
+import { STORAGE_KEY_PATIENT_TOKEN, STORAGE_KEY_AGENDAMENTOS } from '@/lib/storage'
 import {
   ArrowLeft, ArrowRight, CalendarDays,
   ChevronLeft, ChevronRight, Loader2, Clock,
   UserCircle, CheckCircle2, FileText, MapPin, User,
   Check, Info, AlertTriangle, XCircle, X, Stethoscope
 } from 'lucide-react'
-
-// ─── Paleta rosa ────────────────────────────────────────────────
-const C = {
-  pink50:  '#FDF0F7',
-  pink100: '#F9D0E9',
-  pink200: '#F3A1D0',
-  pink400: '#E84393',
-  pink600: '#C73280',
-  pink800: '#8B1F57',
-  gray50:  '#FAFAFA',
-  gray100: '#F4F4F5',
-  gray200: '#E4E4E7',
-  gray400: '#A1A1AA',
-  gray600: '#52525B',
-  gray800: '#18181B',
-}
+import { C } from '@/styles/palette'
 
 // ─── Tipos ──────────────────────────────────────────────────────
 type EscalaMedica = {
+  idx: number
+  id: string
   profissional: string
-  dia_semana: number
-  tipo_escala: 'semanal' | 'intercalada'
-  data_base_intercalada: string | null
   horarios: string[]
+  data: string // formato: "YYYY-MM-DD"
 }
 
 type Profissional = {
@@ -55,22 +41,6 @@ const formatarTelefone = (value: string) => {
   value = value.replace(/^(\d{2})(\d)/g, '($1) $2')
   value = value.replace(/(\d{5})(\d)/, '$1-$2')
   return value.substring(0, 15)
-}
-
-/**
- * Determina se a semana da `data` está "ativa" para uma escala intercalada.
- * Retorna true se a diferença em semanas (ISO) entre `data` e `dataBase` for PAR.
- */
-const isSemanaAtiva = (data: Date, dataBase: string): boolean => {
-  const base = new Date(dataBase + 'T00:00:00')
-  // Normaliza ambas para início da semana (domingo)
-  const normData = new Date(data)
-  normData.setHours(0, 0, 0, 0)
-  const normBase = new Date(base)
-  normBase.setHours(0, 0, 0, 0)
-  const diffMs = normData.getTime() - normBase.getTime()
-  const diffSemanas = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000))
-  return diffSemanas % 2 === 0
 }
 
 const gerarIniciais = (nome: string): string => {
@@ -223,10 +193,12 @@ export default function AgendamentoPage() {
     const carregarEscalas = async () => {
       setCarregandoEscalas(true)
       try {
+        // Carrega todas as escalas do profissional (datas específicas)
         const { data, error } = await supabase
           .from('escalas_medicas')
           .select('*')
           .eq('profissional', profissionalSelecionado)
+          .order('data', { ascending: true })
 
         if (error) throw error
         setEscalas(data ?? [])
@@ -244,18 +216,9 @@ export default function AgendamentoPage() {
   // ─── Verifica se um dia está disponível na escala ─────────────
   const isDiaDisponivel = useCallback((dataStr: string): boolean => {
     if (!profissionalSelecionado || escalas.length === 0) return false
-    const data = new Date(dataStr + 'T00:00:00')
-    const diaSemana = data.getDay()
-    const escalasDoDia = escalas.filter(e => e.dia_semana === diaSemana)
-    if (escalasDoDia.length === 0) return false
-
-    return escalasDoDia.some(escala => {
-      if (escala.tipo_escala === 'semanal') return true
-      if (escala.tipo_escala === 'intercalada' && escala.data_base_intercalada) {
-        return isSemanaAtiva(data, escala.data_base_intercalada)
-      }
-      return false
-    })
+    
+    // Busca escala para a data exata (formato YYYY-MM-DD)
+    return escalas.some(escala => escala.data === dataStr && escala.horarios.length > 0)
   }, [profissionalSelecionado, escalas])
 
   // ─── Carregar horários disponíveis (escala - agendados) ───────
@@ -267,34 +230,36 @@ export default function AgendamentoPage() {
 
     setCarregandoHorarios(true)
     try {
-      // Horários da escala para aquele dia da semana
-      const data = new Date(dataStr + 'T00:00:00')
-      const diaSemana = data.getDay()
-      const escalasDoDia = escalas.filter(e => e.dia_semana === diaSemana)
+      // Busca a escala específica para a data selecionada
+      const { data: escalaDoDia, error: errorEscala } = await supabase
+        .from('escalas_medicas')
+        .select('horarios')
+        .eq('profissional', profissionalSelecionado)
+        .eq('data', dataStr)
+        .maybeSingle()
 
-      // Une todos os horários das escalas do dia (pode ter múltiplas regras)
-      const horariosEscala = new Set<string>()
-      escalasDoDia.forEach(e => {
-        e.horarios.forEach(h => {
-          // Normaliza para HH:MM (remove segundos se vier HH:MM:SS)
-          horariosEscala.add(h.substring(0, 5))
-        })
-      })
+      if (errorEscala) throw errorEscala
 
-      if (horariosEscala.size === 0) {
+      // Se não houver escala para esta data, não há horários
+      if (!escalaDoDia || !escalaDoDia.horarios || escalaDoDia.horarios.length === 0) {
         setHorariosDisponiveis([])
         return
       }
 
+      // Normaliza horários para HH:MM
+      const horariosEscala = new Set(
+        escalaDoDia.horarios.map((h: string) => h.substring(0, 5))
+      )
+
       // Horários já agendados naquele dia para aquele profissional
-      const { data: agendados, error } = await supabase
+      const { data: agendados, error: errorAgendados } = await supabase
         .from('agendamentos')
         .select('horario_agendamento')
         .eq('profissional', profissionalSelecionado)
         .eq('data_agendamento', dataStr)
         .in('status', ['agendado', 'aguardando', 'em_atendimento'])
 
-      if (error) throw error
+      if (errorAgendados) throw errorAgendados
 
       const horariosOcupados = new Set(
         (agendados ?? []).map((a: { horario_agendamento: string }) =>
@@ -314,7 +279,7 @@ export default function AgendamentoPage() {
     } finally {
       setCarregandoHorarios(false)
     }
-  }, [profissionalSelecionado, escalas])
+  }, [profissionalSelecionado])
 
   // Recarrega horários quando a data ou as escalas mudam
   useEffect(() => {
@@ -465,10 +430,23 @@ export default function AgendamentoPage() {
         throw ea
       }
 
-      // Salva token no localStorage apenas para pacientes (não staff autenticado)
+      // Salva token e cópia do agendamento no localStorage apenas para pacientes (não staff autenticado)
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
-        localStorage.setItem('meu_token_paciente', cpfLimpo)
+        localStorage.setItem(STORAGE_KEY_PATIENT_TOKEN, cpfLimpo)
+
+        // Persiste o agendamento localmente para a página "Meu Agendamento"
+        const raw = localStorage.getItem(`${STORAGE_KEY_AGENDAMENTOS}_${cpfLimpo}`)
+        let lista = raw ? JSON.parse(raw) : []
+        const novoAgendamento = {
+          id: '',
+          data_agendamento: formData.dia,
+          horario_agendamento: `${formData.horario}:00`,
+          status: 'agendado',
+          profissional: profissionalSelecionado,
+        }
+        lista.push(novoAgendamento)
+        localStorage.setItem(`${STORAGE_KEY_AGENDAMENTOS}_${cpfLimpo}`, JSON.stringify(lista))
       }
 
       setProtocolo(`#AGD-${Math.floor(Math.random() * 9000) + 1000}`)
@@ -1034,8 +1012,9 @@ export default function AgendamentoPage() {
                           const isSel   = formData.dia === dataStr
                           const hoje    = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
                           hoje.setHours(0, 0, 0, 0)
-                          const isPast  = new Date(currentYear, currentMonth, dia) < hoje
-                          // Disponível se tiver escala e não for passado
+                          const dataAtual = new Date(currentYear, currentMonth, dia)
+                          const isPast  = dataAtual < hoje
+                          // Disponível se tiver escala para a data exata e não for passado
                           const isDisp  = !isPast && isDiaDisponivel(dataStr)
                           const isBlocked = !isPast && !isDisp
 
@@ -1117,7 +1096,7 @@ export default function AgendamentoPage() {
                                   style={{
                                     borderColor: isSel ? C.pink600 : C.gray200,
                                     background:  isSel ? C.pink600 : '#fff',
-                                    color:       isSel ? '#fff' : isPassado ? C.gray200 : C.gray600,
+                                    color:       isSel ? '#ffffff' : isPassado ? C.gray400 : C.gray600,
                                     opacity:     isPassado ? 0.4 : 1,
                                     cursor:      isPassado ? 'not-allowed' : 'pointer',
                                   }}

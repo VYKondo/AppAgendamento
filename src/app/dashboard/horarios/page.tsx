@@ -1,67 +1,93 @@
 'use client'
 
-import { useEffect, useState, useCallback, Fragment } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase' 
+import { supabase } from '@/lib/supabase'
 import {
   Clock, Save, CheckCircle2, ChevronLeft, ChevronRight,
   CalendarDays, Stethoscope, Loader2, AlertCircle, Trash2,
-  Sun, Sunrise, Sunset, Moon, Info, User, X, Sparkles, Check,
-  Settings2, Calendar
+  Sun, Sunrise, Info, X, Sparkles, UserX, MapPin, Users,
 } from 'lucide-react'
+import { C } from '@/styles/palette'
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const C = {
-  pink50:  '#FFF0F6', pink100: '#FFD6E7', pink200: '#FFADD2', pink300: '#FAA2C1',
-  pink400: '#F06595', pink600: '#E64980', pink800: '#A61E4D',
-  gray50:  '#F8F9FA', gray100: '#F1F3F5', gray200: '#E9ECEF', gray300: '#DEE2E6',
-  gray400: '#ADB5BD', gray500: '#868E96', gray600: '#6C757D', gray700: '#495057', gray800: '#212529',
-  green50: '#EBFBEE', green600: '#2F9E44', green800: '#1C7431',
-  amber50: '#FFF9DB', amber600: '#E67700',
-  white:   '#FFFFFF',
-}
+const green50 = '#EBFBEE', green600 = '#2F9E44', green800 = '#1C7431'
+const amber50 = '#FFF9DB', amber600 = '#E67700'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type Slot = { hora: string; ativo: boolean }
-type DiaAgenda = { 
-  ativo: boolean; 
-  tipo_escala: 'semanal' | 'intercalada'; 
-  data_base_intercalada: string; 
-  slots: Slot[] 
+type Slot      = { hora: string; ativo: boolean }
+type DiaAgenda = { slots: Slot[] }
+type Agenda    = Record<string, DiaAgenda> // chave: 'YYYY-MM-DD'
+
+type ProfissionalInfo = {
+  nomeCompleto: string    // "Adriana (Município C)" - valor para DB
+  nome: string            // "Adriana"
+  municipio: string       // "Município C"
+  iniciais: string        // "AD"
 }
-type Agenda = Record<string, DiaAgenda> 
 
-const DIAS_SEMANA = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado']
-const DIAS_ABREV  = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-
+// ─── Constantes ───────────────────────────────────────────────────────────────
 const BLOCOS_HORARIO = [
-  { 
-    label: 'Manhã',   
-    icon: Sunrise, 
-    horas: ['07:30', '07:50', '08:10', '08:30', '08:50', '09:10', '09:30', '09:50', '10:10', '10:30', '10:50', '11:10', '11:30'] 
+  {
+    label: 'Manhã', icon: Sunrise,
+    horas: ['07:30','07:50','08:10','08:30','08:50','09:10','09:30','09:50',
+            '10:10','10:30','10:50','11:10','11:30'],
   },
-  { 
-    label: 'Tarde',   
-    icon: Sun,     
-    horas: ['13:00', '13:20', '13:40', '14:00', '14:20', '14:40', '15:00', '15:20', '15:40', '16:00', '16:20', '16:40', '17:00'] 
+  {
+    label: 'Tarde', icon: Sun,
+    horas: ['13:00','13:20','13:40','14:00','14:20','14:40','15:00','15:20',
+            '15:40','16:00','16:20','16:40','17:00'],
   },
 ]
-
 const TODAS_HORAS = BLOCOS_HORARIO.flatMap(b => b.horas)
+const DIAS_ABREV  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+const DIAS_SEMANA = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']
+const MESES_LABEL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+const MESES_ABREV = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
 
-function buildAgendaVazia(): Agenda {
-  const agenda: Agenda = {}
-  for (let i = 0; i < 7; i++) {
-    agenda[i.toString()] = { 
-      ativo: false, 
-      tipo_escala: 'semanal', 
-      data_base_intercalada: '', 
-      slots: TODAS_HORAS.map(h => ({ hora: h, ativo: false })) 
-    }
-  }
-  return agenda
+// ─── Helpers de data ──────────────────────────────────────────────────────────
+function dateKey(y: number, m: number, d: number): string {
+  return `${y}-${String(m + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+}
+function todayKey(): string {
+  const t = new Date()
+  return dateKey(t.getFullYear(), t.getMonth(), t.getDate())
+}
+function isBeforeToday(key: string): boolean { return key < todayKey() }
+function labelFromKey(key: string): string {
+  const [y, m, d] = key.split('-').map(Number)
+  const date = new Date(y, m - 1, d)
+  return `${DIAS_SEMANA[date.getDay()]}, ${d} de ${MESES_ABREV[m - 1]}. de ${y}`
+}
+function buildDiaVazio(): DiaAgenda {
+  return { slots: TODAS_HORAS.map(h => ({ hora: h, ativo: false })) }
 }
 
+// ─── Helpers de profissional ──────────────────────────────────────────────────
+function parseProfissional(nomeCompleto: string): ProfissionalInfo {
+  const match = nomeCompleto.match(/^(.+?)\s*\((.+?)\)$/)
+  if (match) {
+    const nome = match[1].trim()
+    const municipio = match[2].trim()
+    const iniciais = nome.split(' ')
+      .slice(0, 2)
+      .map(p => p[0]?.toUpperCase())
+      .join('')
+    return { nomeCompleto, nome, municipio, iniciais }
+  }
+  const iniciais = nomeCompleto.split(' ').slice(0, 2).map(p => p[0]?.toUpperCase()).join('')
+  return { nomeCompleto, nome: nomeCompleto, municipio: '', iniciais: iniciais || 'PR' }
+}
+
+function gerarCorPorNome(nome: string): string {
+  // Gera uma cor consistente baseada no nome para o avatar
+  const cores = [C.pink400, '#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4']
+  let hash = 0
+  for (let i = 0; i < nome.length; i++) hash = nome.charCodeAt(i) + ((hash << 5) - hash)
+  return cores[Math.abs(hash) % cores.length]
+}
+
+// ─── Componentes auxiliares ───────────────────────────────────────────────────
 function LoadingScreen() {
   return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4 animate-pulse">
@@ -73,230 +99,420 @@ function LoadingScreen() {
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t) }, [onClose])
-  const bg    = type === 'success' ? C.green50  : '#FFF0F0'
-  const color = type === 'success' ? C.green800 : '#C92A2A'
+  const bg    = type === 'success' ? green50  : '#FFF0F0'
+  const color = type === 'success' ? green800 : '#C92A2A'
   const Icon  = type === 'success' ? CheckCircle2 : AlertCircle
   return (
-    <div className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl border text-sm font-medium animate-in slide-in-from-bottom-4 fade-in duration-300"
-      style={{ background: bg, color, borderColor: type === 'success' ? '#B2F2BB' : '#FFC9C9' }}>
+    <div
+      className="fixed bottom-6 right-6 z-[200] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl border text-sm font-medium animate-in slide-in-from-bottom-4 fade-in duration-300"
+      style={{ background: bg, color, borderColor: type === 'success' ? '#B2F2BB' : '#FFC9C9' }}
+    >
       <Icon size={18} /><span>{msg}</span>
       <button onClick={onClose} className="ml-2 opacity-50 hover:opacity-100 transition-opacity"><X size={14} /></button>
     </div>
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Avatar do Profissional ───────────────────────────────────────────────────
+function AvatarProfissional({ info, size = 'md' }: { info: ProfissionalInfo; size?: 'sm' | 'md' | 'lg' }) {
+  const sizes = { sm: 'w-8 h-8 text-xs', md: 'w-10 h-10 text-sm', lg: 'w-12 h-12 text-base' }
+  const bg = gerarCorPorNome(info.nome)
+  
+  return (
+    <div 
+      className={`${sizes[size]} rounded-full flex items-center justify-center font-bold text-white shrink-0`}
+      style={{ background: bg }}
+      title={info.nomeCompleto}
+    >
+      {info.iniciais}
+    </div>
+  )
+}
+
+// ─── Opção do Dropdown de Profissionais ───────────────────────────────────────
+function ProfissionalOption({ info, selected }: { info: ProfissionalInfo; selected: boolean }) {
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <AvatarProfissional info={info} size="sm" />
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-semibold truncate ${selected ? 'text-pink-700' : 'text-gray-800'}`}>
+          {info.nome}
+        </p>
+        {info.municipio && (
+          <p className={`text-xs truncate flex items-center gap-1 ${selected ? 'text-pink-500' : 'text-gray-400'}`}>
+            <MapPin size={10} />
+            {info.municipio}
+          </p>
+        )}
+      </div>
+      {selected && <CheckCircle2 size={16} className="text-pink-600 shrink-0" />}
+    </div>
+  )
+}
+
+// ─── SlotEditor ───────────────────────────────────────────────────────────────
+function SlotEditor({
+  dateKey: dk,
+  onToggleSlot,
+  onToggleBloco,
+  onLimpar,
+  isSlotAtivo,
+  isBlocoEstado,
+  getSlotsAtivos,
+}: {
+  dateKey: string
+  onToggleSlot:   (key: string, hora: string) => void
+  onToggleBloco:  (key: string, horas: string[], ativar: boolean) => void
+  onLimpar:       (key: string) => void
+  isSlotAtivo:    (key: string, hora: string) => boolean
+  isBlocoEstado:  (key: string, horas: string[]) => 'nenhum' | 'parcial' | 'todos'
+  getSlotsAtivos: (key: string) => number
+}) {
+  const ativos = getSlotsAtivos(dk)
+
+  return (
+    <div className="bg-white rounded-2xl border shadow-sm overflow-hidden" style={{ borderColor: C.gray100 }}>
+
+      {/* Cabeçalho */}
+      <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: C.gray100, background: C.pink50 }}>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: C.pink400 }}>Horários do dia</p>
+          <h3 className="text-sm font-extrabold mt-0.5 leading-snug" style={{ color: C.gray800 }}>
+            {labelFromKey(dk)}
+          </h3>
+        </div>
+        <div className="flex items-center gap-2">
+          {ativos > 0 && (
+            <span className="px-2 py-1 rounded-lg text-xs font-bold" style={{ background: C.pink100, color: C.pink800 }}>
+              {ativos} vagas
+            </span>
+          )}
+          <button
+            onClick={() => onLimpar(dk)}
+            className="p-1.5 rounded-lg transition-colors text-gray-400 hover:text-red-600 hover:bg-red-50"
+            title="Limpar dia"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* Blocos de horário */}
+      <div className="p-5 space-y-5">
+        {BLOCOS_HORARIO.map(bloco => {
+          const estado = isBlocoEstado(dk, bloco.horas)
+          return (
+            <div key={bloco.label}>
+              {/* Header do bloco */}
+              <div className="flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: C.pink50 }}>
+                    <bloco.icon size={13} style={{ color: C.pink600 }} />
+                  </div>
+                  <span className="text-xs font-bold" style={{ color: C.gray700 }}>{bloco.label}</span>
+                  <span className="text-[10px]" style={{ color: C.gray400 }}>
+                    {bloco.horas[0]} – {bloco.horas.at(-1)}
+                  </span>
+                  {estado === 'parcial' && (
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold" style={{ background: amber50, color: amber600 }}>Parcial</span>
+                  )}
+                  {estado === 'todos' && (
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold" style={{ background: green50, color: green600 }}>
+                      <Sparkles size={8} /> Completo
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => onToggleBloco(dk, bloco.horas, true)}
+                    className="px-2 py-0.5 rounded text-[10px] font-bold"
+                    style={{ background: C.pink50, color: C.pink600 }}
+                  >Todos</button>
+                  <button
+                    onClick={() => onToggleBloco(dk, bloco.horas, false)}
+                    className="px-2 py-0.5 rounded text-[10px] font-bold"
+                    style={{ background: C.gray100, color: C.gray600 }}
+                  >Limpar</button>
+                </div>
+              </div>
+
+              {/* Grid de slots */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {bloco.horas.map(hora => {
+                  const ativo = isSlotAtivo(dk, hora)
+                  return (
+                    <button
+                      key={hora}
+                      onClick={() => onToggleSlot(dk, hora)}
+                      className="py-2 rounded-xl border text-[11px] font-bold transition-all duration-150"
+                      style={{
+                        borderColor: ativo ? C.pink600 : C.gray200,
+                        background:  ativo ? C.pink600 : C.white,
+                        color:       ativo ? '#fff'    : C.gray600,
+                        boxShadow:   ativo ? `0 0 0 2px ${C.pink100}` : 'none',
+                      }}
+                    >
+                      {hora}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
 export default function AgendaMedicaPage() {
   const router = useRouter()
+  const hoje   = new Date()
+
+  const [authStatus,              setAuthStatus]              = useState<'loading' | 'auth'>('loading')
+  const [agenda,                  setAgenda]                  = useState<Agenda>({})
+  const [saving,                  setSaving]                  = useState(false)
+  const [toast,                   setToast]                   = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [hasChanges,              setHasChanges]              = useState(false)
+  const [calYear,                 setCalYear]                 = useState(hoje.getFullYear())
+  const [calMonth,                setCalMonth]                = useState(hoje.getMonth())
+  const [dataSelecionada,         setDataSelecionada]         = useState<string | null>(null)
   
-  const [authStatus, setAuthStatus]     = useState<'loading' | 'auth'>('loading')
-  const [agenda, setAgenda]             = useState<Agenda>(buildAgendaVazia())
-  const [saving, setSaving]             = useState(false)
-  const [toast, setToast]               = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  // Lista completa de profissionais com informações parseadas
+  const [profissionaisInfo,       setProfissionaisInfo]       = useState<ProfissionalInfo[]>([])
+  const [carregandoProfissionais, setCarregandoProfissionais] = useState(true)
+  
+  const [profissionalSelecionado, setProfissionalSelecionado] = useState('')
+  const [datasOriginais,          setDatasOriginais]          = useState<Set<string>>(new Set())
 
-  const [diaSelecionado, setDiaSelecionado] = useState<number>(1)
-  const [viewMode, setViewMode] = useState<'semana' | 'dia'>('dia')
-  const [hasChanges, setHasChanges]     = useState(false)
+  // Memoiza a lista de profissionais parseados para performance
+  const profissionaisParseados = useMemo(() => {
+    return profissionaisInfo.map(parseProfissional)
+  }, [profissionaisInfo])
 
-  // ─── Profissionais carregados dinamicamente ───
-  const [profissionais, setProfissionais] = useState<string[]>([])
-  const [profissionalSelecionado, setProfissionalSelecionado] = useState<string>('')
-
+  // ── Auth + carregar todos os profissionais ─────────────────────────────────
   useEffect(() => {
     const checkAuth = async () => {
       const { data } = await supabase.auth.getSession()
-      if (!data.session?.user) {
-        router.push('/dashboard')
-        return
-      }
+      if (!data.session?.user) { router.push('/dashboard'); return }
       setAuthStatus('auth')
-      carregarProfissionais()
+
+      // Carrega TODOS os profissionais únicos da tabela escalas_medicas
+      setCarregandoProfissionais(true)
+      try {
+        const { data: rows, error } = await supabase
+          .from('escalas_medicas')
+          .select('profissional')
+          .order('profissional')
+
+        if (error) throw error
+
+        // Deduplica mantendo a ordem
+        const nomesUnicos = [...new Set(rows?.map(r => r.profissional as string) || [])]
+        setProfissionaisInfo(nomesUnicos)
+      } catch (err) {
+        console.error('Erro ao carregar profissionais:', err)
+        setToast({ msg: 'Erro ao carregar quadro médico.', type: 'error' })
+      } finally {
+        setCarregandoProfissionais(false)
+      }
     }
     checkAuth()
   }, [router])
 
-  const carregarProfissionais = async () => {
-    const { data } = await supabase
-      .from('escalas_medicas')
-      .select('profissional')
-    if (data) {
-      setProfissionais([...new Set(data.map(r => r.profissional))].sort())
-    }
-  }
-
-  // Carrega a escala sempre que mudar o profissional selecionado
+  // ── Carrega agenda ao trocar profissional ─────────────────────────────────
   useEffect(() => {
     if (!profissionalSelecionado) {
-      setAgenda(buildAgendaVazia())
+      setAgenda({})
       setHasChanges(false)
+      setDatasOriginais(new Set())
       return
     }
-
     async function load() {
-      // CORREÇÃO: Busca por "profissional" e não "medico_id"
       const { data, error } = await supabase
         .from('escalas_medicas')
-        .select('*')
+        .select('data, horarios')
         .eq('profissional', profissionalSelecionado)
-      
-      if (error) {
-        console.error("Erro ao buscar:", error)
-        return
-      }
 
-      const nova = buildAgendaVazia()
-      
-      if (data && data.length > 0) {
-        data.forEach(d => {
-          const key = d.dia_semana.toString()
-          if (nova[key]) {
-            nova[key].ativo = true
-            nova[key].tipo_escala = d.tipo_escala || 'semanal'
-            nova[key].data_base_intercalada = d.data_base_intercalada || ''
-            
-            d.horarios.forEach((h: string) => {
-              const slot = nova[key].slots.find(s => s.hora === h)
-              if (slot) slot.ativo = true
-            })
-          }
-        })
-      }
+      if (error) { console.error(error); return }
+
+      const nova: Agenda = {}
+      const datas = new Set<string>()
+
+      data?.forEach(row => {
+        const key = row.data as string
+        nova[key] = {
+          slots: TODAS_HORAS.map(h => ({ hora: h, ativo: (row.horarios as string[]).includes(h) }))
+        }
+        datas.add(key)
+      })
+
       setAgenda(nova)
+      setDatasOriginais(datas)
       setHasChanges(false)
     }
     load()
   }, [profissionalSelecionado])
 
-  const updateDiaConfig = useCallback((diaKey: string, field: keyof DiaAgenda, value: any) => {
-    setAgenda(prev => ({ ...prev, [diaKey]: { ...prev[diaKey], [field]: value } }))
-    setHasChanges(true)
-  }, [])
+  // ── Helpers de leitura ────────────────────────────────────────────────────
+  const getSlotsAtivos = (key: string) =>
+    agenda[key]?.slots.filter(s => s.ativo).length ?? 0
 
-  const toggleSlot = useCallback((diaKey: string, hora: string) => {
+  const isSlotAtivo = useCallback((key: string, hora: string) =>
+    agenda[key]?.slots.find(s => s.hora === hora)?.ativo ?? false,
+  [agenda])
+
+  const isBlocoEstado = useCallback((key: string, horas: string[]): 'nenhum' | 'parcial' | 'todos' => {
+    const ativos = horas.filter(h => isSlotAtivo(key, h)).length
+    if (ativos === 0)            return 'nenhum'
+    if (ativos === horas.length) return 'todos'
+    return 'parcial'
+  }, [isSlotAtivo])
+
+  // ── Mutações de agenda ────────────────────────────────────────────────────
+  const toggleSlot = useCallback((key: string, hora: string) => {
     setAgenda(prev => {
-      const dia = prev[diaKey]
-      return {
-        ...prev,
-        [diaKey]: {
-          ...dia,
-          ativo: true,
-          slots: dia.slots.map(s => s.hora === hora ? { ...s, ativo: !s.ativo } : s)
-        }
-      }
+      const dia = prev[key] ?? buildDiaVazio()
+      return { ...prev, [key]: { slots: dia.slots.map(s => s.hora === hora ? { ...s, ativo: !s.ativo } : s) } }
     })
     setHasChanges(true)
   }, [])
 
-  const toggleBloco = useCallback((diaKey: string, horas: string[], ativar: boolean) => {
+  const toggleBloco = useCallback((key: string, horas: string[], ativar: boolean) => {
     setAgenda(prev => {
-      const dia = prev[diaKey]
-      return {
-        ...prev,
-        [diaKey]: {
-          ...dia,
-          ativo: ativar ? true : dia.ativo,
-          slots: dia.slots.map(s => horas.includes(s.hora) ? { ...s, ativo: ativar } : s)
-        }
-      }
+      const dia = prev[key] ?? buildDiaVazio()
+      return { ...prev, [key]: { slots: dia.slots.map(s => horas.includes(s.hora) ? { ...s, ativo: ativar } : s) } }
     })
     setHasChanges(true)
   }, [])
 
-  const limparDia = useCallback((diaKey: string) => {
-    setAgenda(prev => ({
-      ...prev,
-      [diaKey]: { ...prev[diaKey], ativo: false, slots: TODAS_HORAS.map(h => ({ hora: h, ativo: false })) }
-    }))
+  const limparDia = useCallback((key: string) => {
+    setAgenda(prev => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
     setHasChanges(true)
   }, [])
 
-  // ─── SALVAR NO BANCO ───
+  // ── Salvar ────────────────────────────────────────────────────────────────
   async function salvarAgenda() {
     if (!profissionalSelecionado) {
       setToast({ msg: 'Selecione um profissional primeiro!', type: 'error' })
       return
     }
-
     setSaving(true)
     try {
-      // CORREÇÃO: Limpa as regras baseadas no nome do profissional
-      await supabase.from('escalas_medicas').delete().eq('profissional', profissionalSelecionado)
-
-      const insertData = Object.entries(agenda)
-        .filter(([_, dia]) => dia.ativo && dia.slots.some(s => s.ativo))
+      // 1. Rows with at least one active slot → upsert
+      const upsertRows = Object.entries(agenda)
+        .filter(([, dia]) => dia.slots.some(s => s.ativo))
         .map(([key, dia]) => ({
-          profissional: profissionalSelecionado, // CORREÇÃO AQUI
-          dia_semana: parseInt(key),
-          tipo_escala: dia.tipo_escala,
-          data_base_intercalada: dia.tipo_escala === 'intercalada' && dia.data_base_intercalada ? dia.data_base_intercalada : null,
-          horarios: dia.slots.filter(s => s.ativo).map(s => s.hora).sort()
+          profissional: profissionalSelecionado,
+          data:         key,
+          horarios:     dia.slots.filter(s => s.ativo).map(s => s.hora).sort(),
         }))
 
-      if (insertData.length > 0) {
-        const { error } = await supabase.from('escalas_medicas').insert(insertData)
+      if (upsertRows.length > 0) {
+        const { error } = await supabase
+          .from('escalas_medicas')
+          .upsert(upsertRows, { onConflict: 'profissional,data' })
         if (error) throw error
       }
 
-      setToast({ msg: 'Padrão de horários salvo com sucesso!', type: 'success' })
+      // 2. Dates that existed in DB but are now empty/removed → delete individually
+      const datasAtivas = new Set(upsertRows.map(r => r.data))
+      const datasParaDeletar = [...datasOriginais].filter(d => !datasAtivas.has(d))
+
+      if (datasParaDeletar.length > 0) {
+        const { error } = await supabase
+          .from('escalas_medicas')
+          .delete()
+          .eq('profissional', profissionalSelecionado)
+          .in('data', datasParaDeletar)
+        if (error) throw error
+      }
+
+      // 3. Update local reference set
+      setDatasOriginais(datasAtivas)
+      setToast({ msg: 'Agenda salva com sucesso!', type: 'success' })
       setHasChanges(false)
-    } catch (error) {
-      console.error("Erro completo do Supabase:", error) // Adicionado log para facilitar debug futuro
-      setToast({ msg: 'Erro ao salvar a escala. Tente novamente.', type: 'error' })
+    } catch (err) {
+      console.error(err)
+      setToast({ msg: 'Erro ao salvar. Tente novamente.', type: 'error' })
     } finally {
       setSaving(false)
     }
   }
 
-  function getSlotsAtivos(diaKey: string): number {
-    return agenda[diaKey]?.slots.filter(s => s.ativo).length ?? 0
+  // ── Calendário ────────────────────────────────────────────────────────────
+  const prevMonth = () => {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11) }
+    else setCalMonth(m => m - 1)
+  }
+  const nextMonth = () => {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0) }
+    else setCalMonth(m => m + 1)
   }
 
-  function isSlotAtivo(diaKey: string, hora: string): boolean {
-    return agenda[diaKey]?.slots.find(s => s.hora === hora)?.ativo ?? false
-  }
+  const cellsDayMonth = (() => {
+    const firstDow  = new Date(calYear, calMonth, 1).getDay()
+    const totalDays = new Date(calYear, calMonth + 1, 0).getDate()
+    const cells: (number | null)[] = []
+    for (let i = 0; i < firstDow; i++) cells.push(null)
+    for (let d = 1; d <= totalDays; d++) cells.push(d)
+    return cells
+  })()
 
-  function isBlocoTodoParcial(diaKey: string, horas: string[]): 'nenhum' | 'parcial' | 'todos' {
-    const ativos = horas.filter(h => isSlotAtivo(diaKey, h)).length
-    if (ativos === 0) return 'nenhum'
-    if (ativos === horas.length) return 'todos'
-    return 'parcial'
-  }
+  const totalVagasMes = cellsDayMonth.reduce((acc, d) => {
+    if (!d) return acc
+    return acc + getSlotsAtivos(dateKey(calYear, calMonth, d))
+  }, 0)
 
-  function totalSlotsSemana(): number {
-    return Object.values(agenda).reduce((acc, d) => acc + d.slots.filter(s => s.ativo).length, 0)
-  }
+  const totalVagasGeral = Object.values(agenda)
+    .reduce((acc, dia) => acc + dia.slots.filter(s => s.ativo).length, 0)
+
+  // Profissional selecionado parseado para exibição
+  const profissionalAtual = useMemo(() => {
+    if (!profissionalSelecionado) return null
+    return parseProfissional(profissionalSelecionado)
+  }, [profissionalSelecionado])
 
   if (authStatus === 'loading') return <LoadingScreen />
-
-  const diaAtualKey = diaSelecionado.toString()
-  const diaAgendaAtual = agenda[diaAtualKey]
 
   return (
     <div className="animate-fade-in w-full pb-20">
 
-      {/* ── Barra de Controles Mestre ── */}
+      {/* ── Barra superior ── */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        
-        {/* SELETOR DE PROFISSIONAL (Adicionado para amarrar a lógica) */}
         <div className="flex items-center gap-3 w-full md:w-auto">
-           <div className="p-2 bg-pink-50 rounded-lg"><Stethoscope size={18} className="text-pink-600"/></div>
-           <select
-             value={profissionalSelecionado}
-             onChange={e => setProfissionalSelecionado(e.target.value)}
-             className="flex-1 md:w-64 py-2 px-3 border rounded-xl text-sm font-bold text-gray-700 outline-none focus:border-pink-400"
-             style={{ borderColor: C.gray200 }}
-           >
-             <option value="" disabled>Selecione o Profissional...</option>
-             {profissionais.map(p => (
-               <option key={p} value={p}>{p}</option>
-             ))}
-           </select>
+          <div className="p-2 bg-pink-50 rounded-lg"><Users size={18} className="text-pink-600" /></div>
+          
+          {carregandoProfissionais ? (
+            <div className="flex-1 md:w-64 py-2 px-3 border rounded-xl text-sm text-gray-400 flex items-center gap-2" style={{ borderColor: C.gray200 }}>
+              <Loader2 size={14} className="animate-spin" />
+              Carregando profissionais...
+            </div>
+          ) : (
+            <select
+              value={profissionalSelecionado}
+              onChange={e => { setProfissionalSelecionado(e.target.value); setDataSelecionada(null) }}
+              className="flex-1 md:w-64 py-2 px-3 border rounded-xl text-sm font-bold text-gray-700 outline-none focus:border-pink-400 bg-white"
+              style={{ borderColor: C.gray200 }}
+            >
+              <option value="" disabled>Selecione o Profissional...</option>
+              {profissionaisParseados.map(info => (
+                <option key={info.nomeCompleto} value={info.nomeCompleto}>
+                  {info.nome}{info.municipio ? ` — ${info.municipio}` : ''}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
-        {/* Botão Salvar Global */}
         <div className="flex items-center gap-3">
           {hasChanges && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg animate-pulse font-bold" style={{ background: C.amber50, color: C.amber600 }}>
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg animate-pulse font-bold" style={{ background: amber50, color: amber600 }}>
               <Info size={14} /> Alterações não salvas
             </span>
           )}
@@ -304,257 +520,198 @@ export default function AgendaMedicaPage() {
             onClick={salvarAgenda}
             disabled={saving || !hasChanges || !profissionalSelecionado}
             className="flex items-center w-full md:w-auto justify-center gap-2 px-6 py-2 h-10 rounded-xl text-sm font-bold text-white transition-all disabled:opacity-50"
-            style={{ background: (hasChanges && profissionalSelecionado) && !saving ? C.pink600 : C.gray300, cursor: (hasChanges && profissionalSelecionado) && !saving ? 'pointer' : 'not-allowed' }}
+            style={{
+              background: (hasChanges && profissionalSelecionado && !saving) ? C.pink600 : C.gray300,
+              cursor:     (hasChanges && profissionalSelecionado && !saving) ? 'pointer' : 'not-allowed',
+            }}
           >
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-            {saving ? 'Salvando…' : 'Salvar Calendário'}
+            {saving ? 'Salvando…' : 'Salvar Agenda'}
           </button>
         </div>
       </div>
 
-      {/* ── SEÇÃO OPACA SE NENHUM PROFISSIONAL FOR SELECIONADO ── */}
+      {/* Aviso quando não há profissionais */}
+      {!carregandoProfissionais && profissionaisInfo.length === 0 && (
+        <div className="flex items-center gap-3 px-5 py-4 rounded-2xl border mb-6 text-sm font-medium"
+          style={{ background: amber50, borderColor: '#FFE066', color: amber600 }}>
+          <UserX size={18} />
+          <span>
+            Nenhum profissional encontrado na tabela <strong>escalas_medicas</strong>.
+            Verifique se os dados foram cadastrados corretamente.
+          </span>
+        </div>
+      )}
+
+      {/* ── Info do profissional selecionado ── */}
+      {profissionalAtual && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl mb-6" style={{ background: C.pink50 }}>
+          <AvatarProfissional info={profissionalAtual} size="md" />
+          <div>
+            <p className="text-sm font-bold" style={{ color: C.gray800 }}>{profissionalAtual.nome}</p>
+            {profissionalAtual.municipio && (
+              <p className="text-xs flex items-center gap-1" style={{ color: C.gray500 }}>
+                <MapPin size={12} /> {profissionalAtual.municipio}
+              </p>
+            )}
+          </div>
+          <span className="ml-auto text-xs font-semibold px-2 py-1 rounded-lg" style={{ background: 'white', color: C.pink600 }}>
+            {Object.keys(agenda).length} dias com agenda
+          </span>
+        </div>
+      )}
+
+      {/* ── Conteúdo principal (opaco quando sem profissional) ── */}
       <div className={`transition-opacity duration-300 ${!profissionalSelecionado ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-        
-        {/* ── Page title + stats ── */}
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <CalendarDays size={20} style={{ color: C.pink600 }} />
               <h2 className="text-2xl font-extrabold tracking-tight" style={{ color: C.gray800 }}>
-                Padrão de Atendimento
+                Agenda de Atendimento
               </h2>
             </div>
             <p className="text-sm font-medium" style={{ color: C.gray500 }}>
-              Gerencie as regras fixas dos dias e horários da sua agenda.
+              Clique em qualquer data para definir os horários disponíveis naquele dia.
             </p>
           </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="px-5 py-2.5 rounded-xl border text-center shadow-sm" style={{ background: C.pink50, borderColor: C.pink100 }}>
-              <p className="text-xl font-extrabold leading-none" style={{ color: C.pink600 }}>{totalSlotsSemana()}</p>
-              <p className="text-xs mt-1 font-bold" style={{ color: C.pink800 }}>Vagas por semana</p>
-            </div>
-            {/* O toggle de Visão Semanal / Diária foi removido daqui */}
+          <div className="px-5 py-2.5 rounded-xl border text-center shadow-sm" style={{ background: C.pink50, borderColor: C.pink100 }}>
+            <p className="text-xl font-extrabold leading-none" style={{ color: C.pink600 }}>{totalVagasGeral}</p>
+            <p className="text-xs mt-1 font-bold" style={{ color: C.pink800 }}>Vagas agendadas</p>
           </div>
         </div>
 
-        {/* ── Day selector strip ── */}
-        <div className="flex gap-2 overflow-x-auto pb-4 mb-6 scrollbar-hide">
-          {[0, 1, 2, 3, 4, 5, 6].map((diaNum) => {
-            const key      = diaNum.toString()
-            const ativos   = getSlotsAtivos(key)
-            const isSel    = diaSelecionado === diaNum
-            const isActiveDay = agenda[key]?.ativo
+        {/* ── Layout: Calendário + Editor ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
 
-            return (
-              <button
-                key={key}
-                onClick={() => { setDiaSelecionado(diaNum); setViewMode('dia') }}
-                className="flex flex-col items-center min-w-[80px] px-3 py-3 rounded-2xl border transition-all duration-150 shrink-0"
-                style={{
-                  borderColor: isSel ? C.pink400 : isActiveDay ? C.pink200 : C.gray200,
-                  background:  isSel ? C.pink600 : isActiveDay ? C.pink50  : C.white,
-                  boxShadow:   isSel ? `0 4px 16px ${C.pink200}` : 'none',
-                }}
-              >
-                <span className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isSel ? 'rgba(255,255,255,0.75)' : C.gray400 }}>
-                  {DIAS_ABREV[diaNum]}
-                </span>
-                <span className="text-sm font-extrabold" style={{ color: isSel ? C.white : isActiveDay ? C.pink600 : C.gray800 }}>
-                  {DIAS_SEMANA[diaNum].split('-')[0]}
-                </span>
-                {ativos > 0 ? (
-                  <span
-                    className="mt-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold leading-none"
+          {/* Calendário */}
+          <div className="lg:col-span-3 bg-white rounded-2xl border shadow-sm p-5" style={{ borderColor: C.gray100 }}>
+
+            {/* Navegação de mês */}
+            <div className="flex items-center justify-between mb-5">
+              <button onClick={prevMonth} className="p-2 rounded-xl hover:bg-gray-50 transition-colors" style={{ color: C.gray600 }}>
+                <ChevronLeft size={18} />
+              </button>
+
+              <div className="text-center">
+                <h3 className="text-base font-extrabold" style={{ color: C.gray800 }}>
+                  {MESES_LABEL[calMonth]} {calYear}
+                </h3>
+                {totalVagasMes > 0 && (
+                  <p className="text-xs font-semibold mt-0.5" style={{ color: C.pink600 }}>
+                    {totalVagasMes} vagas neste mês
+                  </p>
+                )}
+              </div>
+
+              <button onClick={nextMonth} className="p-2 rounded-xl hover:bg-gray-50 transition-colors" style={{ color: C.gray600 }}>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            {/* Cabeçalhos dos dias */}
+            <div className="grid grid-cols-7 mb-1">
+              {DIAS_ABREV.map(d => (
+                <div key={d} className="text-center text-[10px] font-bold uppercase tracking-wider py-1" style={{ color: C.gray400 }}>
+                  {d}
+                </div>
+              ))}
+            </div>
+
+            {/* Células dos dias */}
+            <div className="grid grid-cols-7 gap-1">
+              {cellsDayMonth.map((day, idx) => {
+                if (!day) return <div key={`pad-${idx}`} />
+
+                const key    = dateKey(calYear, calMonth, day)
+                const isPast = isBeforeToday(key)
+                const isHoje = key === todayKey()
+                const slots  = getSlotsAtivos(key)
+                const isSel  = dataSelecionada === key
+
+                return (
+                  <button
+                    key={key}
+                    disabled={isPast}
+                    onClick={() => setDataSelecionada(isSel ? null : key)}
+                    className="relative flex flex-col items-center justify-center rounded-xl py-2 min-h-[52px] transition-all duration-150"
                     style={{
-                      background: isSel ? 'rgba(255,255,255,0.25)' : C.pink100,
-                      color:      isSel ? C.white : C.pink800,
+                      background:  isSel  ? C.pink600 : slots > 0 ? C.pink50 : 'transparent',
+                      borderWidth: isHoje ? 2 : 1,
+                      borderStyle: 'solid',
+                      borderColor: isSel  ? C.pink600 : isHoje ? C.pink400 : slots > 0 ? C.pink200 : 'transparent',
+                      opacity:     isPast ? 0.28 : 1,
+                      cursor:      isPast ? 'default' : 'pointer',
                     }}
                   >
-                    {ativos} vagas
-                  </span>
-                ) : (
-                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full" style={{ background: isSel ? 'rgba(255,255,255,0.3)' : C.gray200 }} />
-                )}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* ══════════ VIEW: DIA ══════════ */}
-        {viewMode === 'dia' && diaAgendaAtual && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-            {/* ── Blocos de horário ── */}
-            <div className="lg:col-span-2 space-y-5">
-              
-              <div className="bg-white rounded-2xl border p-5 shadow-sm" style={{ borderColor: C.gray100 }}>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      checked={diaAgendaAtual.ativo} 
-                      onChange={e => updateDiaConfig(diaAtualKey, 'ativo', e.target.checked)}
-                      className="w-5 h-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500"
-                    />
-                    <span className={`font-bold text-base ${diaAgendaAtual.ativo ? 'text-gray-800' : 'text-gray-400'}`}>
-                      Ativar Atendimentos na {DIAS_SEMANA[diaSelecionado]}
+                    <span className="text-sm font-bold leading-none" style={{ color: isSel ? '#fff' : isHoje ? C.pink600 : C.gray800 }}>
+                      {day}
                     </span>
-                  </label>
 
-                  {diaAgendaAtual.ativo && (
-                    <div className="flex items-center gap-2">
-                      <Settings2 size={16} className="text-gray-400" />
-                      <select
-                        value={diaAgendaAtual.tipo_escala}
-                        onChange={e => updateDiaConfig(diaAtualKey, 'tipo_escala', e.target.value)}
-                        className="px-3 py-2 text-sm font-semibold rounded-lg border outline-none bg-white text-gray-700 shadow-sm"
-                        style={{ borderColor: C.gray200 }}
+                    {slots > 0 ? (
+                      <span
+                        className="mt-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold leading-none"
+                        style={{
+                          background: isSel ? 'rgba(255,255,255,0.25)' : C.pink100,
+                          color:      isSel ? '#fff' : C.pink800,
+                        }}
                       >
-                        <option value="semanal">Toda Semana</option>
-                        <option value="intercalada">Semana Sim / Semana Não</option>
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {diaAgendaAtual.ativo && diaAgendaAtual.tipo_escala === 'intercalada' && (
-                  <div className="mt-4 flex flex-col gap-1.5 p-4 rounded-xl border bg-amber-50 border-amber-200 animate-in fade-in">
-                    <label className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
-                      <Calendar size={14}/> Data de Referência (Uma {DIAS_SEMANA[diaSelecionado]} em que você atende):
-                    </label>
-                    <input 
-                      type="date" 
-                      value={diaAgendaAtual.data_base_intercalada}
-                      onChange={e => updateDiaConfig(diaAtualKey, 'data_base_intercalada', e.target.value)}
-                      className="px-3 py-2 text-sm rounded-lg border outline-none w-full sm:w-48 bg-white border-amber-200 focus:border-amber-400"
-                    />
-                    <p className="text-[11px] text-amber-700 mt-1">
-                      Isso ajuda o sistema a saber quando é sua semana de folga e quando é semana de trabalho.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className={`space-y-5 transition-opacity duration-300 ${!diaAgendaAtual.ativo ? 'opacity-40 pointer-events-none' : ''}`}>
-                {BLOCOS_HORARIO.map(bloco => {
-                  const estado = isBlocoTodoParcial(diaAtualKey, bloco.horas)
-                  return (
-                    <div key={bloco.label} className="bg-white rounded-2xl border p-5 shadow-sm transition-all hover:shadow-md" style={{ borderColor: C.gray100 }}>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: C.pink50 }}>
-                            <bloco.icon size={16} style={{ color: C.pink600 }} />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-bold" style={{ color: C.gray800 }}>{bloco.label}</h3>
-                            <p className="text-xs" style={{ color: C.gray400 }}>{bloco.horas[0]} – {bloco.horas.at(-1)}</p>
-                          </div>
-                          {estado === 'parcial' && <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: C.amber50, color: C.amber600 }}>Parcial</span>}
-                          {estado === 'todos' && <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold" style={{ background: C.green50, color: C.green600 }}><Sparkles size={10} /> Completo</span>}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => toggleBloco(diaAtualKey, bloco.horas, true)} className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all" style={{ background: C.pink50, color: C.pink600 }}>Selecionar Todos</button>
-                          <button onClick={() => toggleBloco(diaAtualKey, bloco.horas, false)} className="px-2.5 py-1 rounded-lg text-xs font-semibold transition-all" style={{ background: C.gray100, color: C.gray600 }}>Limpar</button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                        {bloco.horas.map(hora => {
-                          const ativo = isSlotAtivo(diaAtualKey, hora)
-                          return (
-                            <button
-                              key={hora}
-                              onClick={() => toggleSlot(diaAtualKey, hora)}
-                              className="py-2.5 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 transition-all duration-150"
-                              style={{
-                                borderColor: ativo ? C.pink600 : C.gray200,
-                                background:  ativo ? C.pink600 : C.white,
-                                color:       ativo ? C.white   : C.gray600,
-                                boxShadow:   ativo ? `0 0 0 3px ${C.pink100}` : 'none',
-                              }}
-                            >
-                              <Clock size={12} style={{ opacity: ativo ? 1 : 0.5 }} />
-                              {hora}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+                        {slots}
+                      </span>
+                    ) : (
+                      <span className="mt-1 w-1 h-1 rounded-full" style={{ background: isSel ? 'rgba(255,255,255,0.4)' : 'transparent' }} />
+                    )}
+                  </button>
+                )
+              })}
             </div>
 
-            {/* ── Sidebar resumo do dia ── */}
-            <aside className="space-y-4">
-              <div className="bg-white rounded-2xl border p-5 sticky top-24 shadow-sm" style={{ borderColor: C.gray100 }}>
-                <div className="flex items-center justify-between mb-4 pb-4 border-b" style={{ borderColor: C.gray100 }}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-xl flex items-center justify-center" style={{ background: C.pink50 }}>
-                      <CalendarDays size={14} style={{ color: C.pink600 }} />
-                    </div>
-                    <h3 className="text-sm font-bold" style={{ color: C.gray800 }}>
-                      {DIAS_SEMANA[diaSelecionado]}
-                    </h3>
-                  </div>
-                  <button onClick={() => limparDia(diaAtualKey)} className="p-1.5 rounded-lg transition-colors text-gray-400 hover:text-red-600 hover:bg-red-50" title="Limpar dia inteiro">
-                    <Trash2 size={15} />
-                  </button>
+            {/* Legenda */}
+            <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t" style={{ borderColor: C.gray100 }}>
+              {[
+                { swatch: <div className="w-3 h-3 rounded-sm" style={{ background: C.pink50, border: `1px solid ${C.pink200}` }} />, label: 'Com vagas' },
+                { swatch: <div className="w-3 h-3 rounded-sm" style={{ background: C.pink600 }} />,                                    label: 'Selecionado' },
+                { swatch: <div className="w-3 h-3 rounded-sm border-2" style={{ borderColor: C.pink400 }} />,                          label: 'Hoje' },
+                { swatch: <div className="w-3 h-3 rounded-sm" style={{ background: C.gray200 }} />,                                    label: 'Passado' },
+              ].map(({ swatch, label }) => (
+                <div key={label} className="flex items-center gap-1.5">
+                  {swatch}
+                  <span className="text-[11px]" style={{ color: C.gray400 }}>{label}</span>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {[
-                    { label: 'Slots preenchidos', value: getSlotsAtivos(diaAtualKey), color: C.pink600, bg: C.pink50 },
-                    { label: 'Horas totais', value: `${(getSlotsAtivos(diaAtualKey) * (20 / 60)).toFixed(1)}h`, color: C.green600, bg: C.green50 },
-                  ].map(s => (
-                    <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: s.bg }}>
-                      <p className="text-2xl font-extrabold leading-none" style={{ color: s.color }}>{s.value}</p>
-                      <p className="text-xs mt-1 font-medium" style={{ color: s.color }}>{s.label}</p>
-                    </div>
-                  ))}
-                </div>
-
-                {getSlotsAtivos(diaAtualKey) > 0 ? (
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: C.gray400 }}>Vagas Habilitadas</p>
-                    <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto pr-1">
-                      {agenda[diaAtualKey]?.slots.filter(s => s.ativo).map(s => (
-                        <span key={s.hora} className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-bold" style={{ background: C.pink50, color: C.pink800 }}>
-                          <Clock size={10} /> {s.hora}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-6 rounded-xl border-2 border-dashed text-center" style={{ borderColor: C.gray200 }}>
-                    <CalendarDays size={24} className="mb-2" style={{ color: C.gray200 }} />
-                    <p className="text-xs font-medium" style={{ color: C.gray400 }}>Nenhum horário marcado</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: C.gray400 }}>Clique nos slots para abrir vagas</p>
-                  </div>
-                )}
-
-                {/* Ação rápida */}
-                <button
-                  onClick={() => {
-                    BLOCOS_HORARIO.forEach(b => {
-                      if (b.label === 'Manhã' || b.label === 'Tarde') toggleBloco(diaAtualKey, b.horas, true)
-                    })
-                  }}
-                  className="w-full mt-4 py-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all"
-                  style={{ borderColor: C.pink200, color: C.pink600, background: C.pink50 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = C.pink100 }}
-                  onMouseLeave={e => { e.currentTarget.style.background = C.pink50 }}
-                >
-                  <Sparkles size={14} /> Preencher manhãs e tardes
-                </button>
-              </div>
-            </aside>
+              ))}
+            </div>
           </div>
-        )}
+
+          {/* Painel de edição de slots */}
+          <div className="lg:col-span-2 lg:sticky lg:top-24">
+            {dataSelecionada ? (
+              <SlotEditor
+                dateKey={dataSelecionada}
+                onToggleSlot={toggleSlot}
+                onToggleBloco={toggleBloco}
+                onLimpar={limparDia}
+                isSlotAtivo={isSlotAtivo}
+                isBlocoEstado={isBlocoEstado}
+                getSlotsAtivos={getSlotsAtivos}
+              />
+            ) : (
+              <div
+                className="flex flex-col items-center justify-center text-center rounded-2xl border-2 border-dashed min-h-[300px]"
+                style={{ borderColor: C.gray200 }}
+              >
+                <CalendarDays size={36} className="mb-3" style={{ color: C.gray200 }} />
+                <p className="text-sm font-semibold" style={{ color: C.gray400 }}>Nenhum dia selecionado</p>
+                <p className="text-xs mt-1 max-w-[180px]" style={{ color: C.gray300 }}>
+                  Clique em uma data no calendário para gerenciar os horários
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* ── Toast notification ── */}
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   )

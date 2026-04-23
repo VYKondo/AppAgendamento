@@ -9,6 +9,7 @@ import {
   Edit3, Save, X, AlertTriangle, XCircle, Info, Filter, Stethoscope,
   FileText, User, Home, Heart
 } from 'lucide-react'
+import { C } from '@/styles/palette'
 
 // ── Tipagens ────────────────────────────────────────────────────
 type Paciente = {
@@ -40,29 +41,6 @@ type Agendamento = {
   status: string
   profissional: string | null
   paciente?: Paciente
-}
-
-// ── Paleta ──────────────────────────────────────────────────────
-const C = {
-  pink50:  '#FDF2F8',
-  pink100: '#FCE7F3',
-  pink200: '#F9D0E9',
-  pink300: '#F5A6D5',
-  pink400: '#E84393',
-  pink500: '#D63D8A',
-  pink600: '#C2185B',
-  pink700: '#AD1457',
-  pink800: '#8B1F57',
-  gray50:  '#FAFAFA', 
-  gray100: '#F4F4F5', 
-  gray200: '#E4E4E7', 
-  gray300: '#D1D5DB',
-  gray400: '#A1A1AA',
-  gray500: '#71717A',
-  gray600: '#52525B',
-  gray700: '#3F3F46',
-  gray800: '#18181B',
-  white:   '#FFFFFF',
 }
 
 // ── Helpers de UI ────────────────────────────────────────────────
@@ -126,7 +104,6 @@ function Section({ icon, title, children }: { icon: React.ReactNode; title: stri
   )
 }
 
-// CORRIGIDO: Agora recebe a propriedade "label" para exibir o nome do campo acima do input
 function EditInput({ label, value, onChange, placeholder, type = 'text', className = '' }: {
   label?: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; className?: string
 }) {
@@ -158,16 +135,26 @@ export default function ConsultasPage() {
   const [profissionalFilter, setProfissionalFilter] = useState('todos')
 
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  
+  // ── Toast com auto-dismiss ───────────────────────────────────
   const [toast, setToast] = useState<{ message: string; type: 'error' | 'warning' | 'success' | 'info'; id: number } | null>(null)
+
+  // Auto-dismiss: fecha o toast após 4 segundos
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(timer)
+  }, [toast])
+
+  const showToast = (message: string, type: 'error' | 'warning' | 'success' | 'info' = 'warning') => {
+    setToast({ message, type, id: Date.now() })
+  }
+  // ─────────────────────────────────────────────────────────────
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Partial<Paciente>>({})
   const [editAgendamentoForm, setEditAgendamentoForm] = useState<Partial<Agendamento>>({})
   const [savingEdit, setSavingEdit] = useState(false)
-
-  const showToast = (message: string, type: 'error' | 'warning' | 'success' | 'info' = 'warning') => {
-    setToast({ message, type, id: Date.now() })
-  }
 
   useEffect(() => {
     verificarAcessoEBuscarDados()
@@ -183,19 +170,16 @@ export default function ConsultasPage() {
     }
   }
 
-  // ─── REALTIME: UPDATE (status), INSERT (novos agendamentos) e DELETE ───
+  // ─── REALTIME: UPDATE, INSERT e DELETE ───
   useEffect(() => {
     const subscription = supabase.channel('consultas_realtime')
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'agendamentos' },
         (payload) => {
-          // Atualiza apenas o status em memória
           setAgendamentos((prevAgendamentos) =>
             prevAgendamentos.map((ag) =>
-              ag.id === payload.new.id
-                ? { ...ag, status: payload.new.status }
-                : ag
+              ag.id === payload.new.id ? { ...ag, status: payload.new.status } : ag
             )
           )
         }
@@ -203,16 +187,12 @@ export default function ConsultasPage() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'agendamentos' },
-        () => {
-          // Novo agendamento criado — recarrega a lista completa para trazer dados do paciente
-          verificarAcessoEBuscarDados()
-        }
+        () => { verificarAcessoEBuscarDados() }
       )
       .on(
         'postgres_changes',
         { event: 'DELETE', schema: 'public', table: 'agendamentos' },
         (payload) => {
-          // Remove o item da lista em memória
           setAgendamentos((prevAgendamentos) =>
             prevAgendamentos.filter((ag) => ag.id !== payload.old.id)
           )
@@ -363,7 +343,6 @@ export default function ConsultasPage() {
   const naSalaDeEspera = agendamentos.filter(a => a.status === 'aguardando').length
 
   // ── FUNÇÃO CENTRALIZADA DE RENDERIZAÇÃO DA FICHA COMPLETA ──
-  // CORRIGIDO: Todos os inputs de edição agora recebem a prop "label"
   const renderFichaPaciente = (paciente: Paciente, isEditingThis: boolean) => (
     <div className="flex flex-col gap-8">
       {/* ── DADOS BÁSICOS ── */}
@@ -450,7 +429,7 @@ export default function ConsultasPage() {
   return (
     <section className="animate-fade-in relative space-y-6">
 
-      {/* ── Toast ── */}
+      {/* ── Toast com auto-dismiss e botão de fechar manual ── */}
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[110] animate-in slide-in-from-top-3 fade-in duration-300">
           <div className={`px-5 py-3 rounded-2xl shadow-lg border flex items-center gap-3 text-sm font-bold max-w-md backdrop-blur-md ${
@@ -463,7 +442,15 @@ export default function ConsultasPage() {
             {toast.type === 'warning' && <AlertTriangle size={18} className="shrink-0 text-amber-500" />}
             {toast.type === 'success' && <CheckCircle2  size={18} className="shrink-0 text-green-500" />}
             {toast.type === 'info'    && <Info          size={18} className="shrink-0 text-sky-500" />}
-            {toast.message}
+            <span className="flex-1">{toast.message}</span>
+            {/* Botão para fechar manualmente */}
+            <button 
+              onClick={() => setToast(null)}
+              className="p-1 rounded-full hover:bg-black/5 transition-colors"
+              aria-label="Fechar notificação"
+            >
+              <X size={14} className="opacity-60 hover:opacity-100" />
+            </button>
           </div>
         </div>
       )}
