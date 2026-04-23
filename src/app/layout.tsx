@@ -11,7 +11,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "Câncer de Mama - Portal de Saúde",
+  title: "Portal de Saúde",
   description: "Agendamento de consultas",
 };
 

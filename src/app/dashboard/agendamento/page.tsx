@@ -247,7 +247,7 @@ export default function AgendamentoPage() {
       }
 
       // Normaliza horários para HH:MM
-      const horariosEscala = new Set(
+      const horariosEscala = new Set<String>(
         escalaDoDia.horarios.map((h: string) => h.substring(0, 5))
       )
 
@@ -261,7 +261,7 @@ export default function AgendamentoPage() {
 
       if (errorAgendados) throw errorAgendados
 
-      const horariosOcupados = new Set(
+      const horariosOcupados = new Set<string>(
         (agendados ?? []).map((a: { horario_agendamento: string }) =>
           a.horario_agendamento.substring(0, 5)
         )
