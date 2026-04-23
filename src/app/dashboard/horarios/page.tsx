@@ -279,8 +279,8 @@ export default function AgendaMedicaPage() {
   const [calMonth,                setCalMonth]                = useState(hoje.getMonth())
   const [dataSelecionada,         setDataSelecionada]         = useState<string | null>(null)
   
-  // Lista completa de profissionais com informações parseadas
-  const [profissionaisInfo,       setProfissionaisInfo]       = useState<ProfissionalInfo[]>([])
+  // Lista completa de nomes de profissionais para processamento
+  const [profissionaisNomes,      setProfissionaisNomes]      = useState<string[]>([])
   const [carregandoProfissionais, setCarregandoProfissionais] = useState(true)
   
   const [profissionalSelecionado, setProfissionalSelecionado] = useState('')
@@ -288,8 +288,8 @@ export default function AgendaMedicaPage() {
 
   // Memoiza a lista de profissionais parseados para performance
   const profissionaisParseados = useMemo(() => {
-    return profissionaisInfo.map(parseProfissional)
-  }, [profissionaisInfo])
+    return profissionaisNomes.map(parseProfissional)
+  }, [profissionaisNomes])
 
   // ── Auth + carregar todos os profissionais ─────────────────────────────────
   useEffect(() => {
@@ -309,8 +309,8 @@ export default function AgendaMedicaPage() {
         if (error) throw error
 
         // Deduplica mantendo a ordem
-        const nomesUnicos = [...new Set(rows?.map(r => r.profissional as string) || [])]
-        setProfissionaisInfo(nomesUnicos)
+        const nomesUnicos = Array.from(new Set(rows?.map(r => r.profissional as string) || []))
+        setProfissionaisNomes(nomesUnicos)
       } catch (err) {
         console.error('Erro ao carregar profissionais:', err)
         setToast({ msg: 'Erro ao carregar quadro médico.', type: 'error' })
@@ -342,8 +342,9 @@ export default function AgendaMedicaPage() {
 
       data?.forEach(row => {
         const key = row.data as string
+        const horariosRow = (row.horarios as string[]) || []
         nova[key] = {
-          slots: TODAS_HORAS.map(h => ({ hora: h, ativo: (row.horarios as string[]).includes(h) }))
+          slots: TODAS_HORAS.map(h => ({ hora: h, ativo: horariosRow.includes(h) }))
         }
         datas.add(key)
       })
@@ -464,13 +465,13 @@ export default function AgendaMedicaPage() {
     return cells
   })()
 
-  const totalVagasMes = cellsDayMonth.reduce((acc, d) => {
+  const totalVagasMes = cellsDayMonth.reduce<number>((acc, d) => {
     if (!d) return acc
     return acc + getSlotsAtivos(dateKey(calYear, calMonth, d))
   }, 0)
 
   const totalVagasGeral = Object.values(agenda)
-    .reduce((acc, dia) => acc + dia.slots.filter(s => s.ativo).length, 0)
+    .reduce<number>((acc, dia) => acc + dia.slots.filter(s => s.ativo).length, 0)
 
   // Profissional selecionado parseado para exibição
   const profissionalAtual = useMemo(() => {
@@ -532,7 +533,7 @@ export default function AgendaMedicaPage() {
       </div>
 
       {/* Aviso quando não há profissionais */}
-      {!carregandoProfissionais && profissionaisInfo.length === 0 && (
+      {!carregandoProfissionais && profissionaisNomes.length === 0 && (
         <div className="flex items-center gap-3 px-5 py-4 rounded-2xl border mb-6 text-sm font-medium"
           style={{ background: amber50, borderColor: '#FFE066', color: amber600 }}>
           <UserX size={18} />
