@@ -19,9 +19,9 @@ type DiaAgenda = { slots: Slot[] }
 type Agenda    = Record<string, DiaAgenda> // chave: 'YYYY-MM-DD'
 
 type ProfissionalInfo = {
-  nomeCompleto: string    // "Adriana (Município C)" - valor para DB
+  nomeCompleto: string    // "Adriana (Flórida)" - valor para DB
   nome: string            // "Adriana"
-  municipio: string       // "Município C"
+  municipio: string       // "Flórida"
   iniciais: string        // "AD"
 }
 
@@ -291,32 +291,21 @@ export default function AgendaMedicaPage() {
     return profissionaisNomes.map(parseProfissional)
   }, [profissionaisNomes])
 
-  // ── Auth + carregar todos os profissionais ─────────────────────────────────
+  // ── Auth + carregar todos os profissionais (Fixos) ─────────────────────────
   useEffect(() => {
     const checkAuth = async () => {
       const { data } = await supabase.auth.getSession()
       if (!data.session?.user) { router.push('/dashboard'); return }
       setAuthStatus('auth')
 
-      // Carrega TODOS os profissionais únicos da tabela escalas_medicas
-      setCarregandoProfissionais(true)
-      try {
-        const { data: rows, error } = await supabase
-          .from('escalas_medicas')
-          .select('profissional')
-          .order('profissional')
-
-        if (error) throw error
-
-        // Deduplica mantendo a ordem
-        const nomesUnicos = Array.from(new Set(rows?.map(r => r.profissional as string) || []))
-        setProfissionaisNomes(nomesUnicos)
-      } catch (err) {
-        console.error('Erro ao carregar profissionais:', err)
-        setToast({ msg: 'Erro ao carregar quadro médico.', type: 'error' })
-      } finally {
-        setCarregandoProfissionais(false)
-      }
+      // Lista fixa de profissionais
+      const nomesFixos = [
+        'Adriana (Ribeirão)',
+        'Gleiciane (Grandes Rios)',
+        'Carlos (Flórida)'
+      ]
+      setProfissionaisNomes(nomesFixos)
+      setCarregandoProfissionais(false)
     }
     checkAuth()
   }, [router])

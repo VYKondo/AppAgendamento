@@ -1,12 +1,22 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   Search, CheckCircle2, Clock, CalendarDays,
-  UserX, AlertTriangle, XCircle, Info, Stethoscope, User, ChevronDown
+  UserX, XCircle, Info, Stethoscope, User, ChevronDown, ShieldAlert
 } from 'lucide-react'
 import { C } from '@/styles/palette'
+
+// ── Mapeamento de E-mails para Municípios ──────────────────────
+const EMAIL_TO_MUNICIPIO: Record<string, string> = {
+  'agenda.preventivorb@gmail.com': 'Flórida',
+  'agenda.preventivofi@gmail.com': 'Ribeirão',
+  'agenda.preventivogr@gmail.com': 'Grandes Rios'
+}
+
+const AUTHORIZED_RECEPTION_EMAILS = Object.keys(EMAIL_TO_MUNICIPIO)
 
 // ── Tipagens ────────────────────────────────────────────────────
 type Paciente = {
@@ -26,15 +36,14 @@ type Agendamento = {
 }
 
 export default function RecepcaoPage() {
+  const router = useRouter()
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([])
   const [loading, setLoading] = useState(true)
-
-  // Profissionais carregados dinamicamente do banco
-  const [profissionais, setProfissionais] = useState<string[]>([])
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null)
+  const [userMunicipio, setUserMunicipio] = useState<string>('')
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('')
-  const [profissionalFilter, setProfissionalFilter] = useState('todos')
   
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info'; id: number } | null>(null)
 
@@ -49,58 +58,82 @@ export default function RecepcaoPage() {
     return () => clearTimeout(t)
   }, [toast])
 
-  // Busca dados e escuta o Realtime (Atualização Automática)
+  // Verifica Acesso, Busca dados e escuta o Realtime (Atualização Automática)
   useEffect(() => {
-    buscarDadosFila()
-    carregarProfissionais()
+    let subscription: any
 
-    const subscription = supabase.channel('recepcao_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' }, () => {
-        buscarDadosFila()
-      })
-      .subscribe()
+    const checkAccessAndFetch = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        // Se não estiver logado, manda para o login com o retorno salvo
+        router.push('/medico?redirectTo=/dashboard/recepcao')
+        return
+      }
 
-    return () => { supabase.removeChannel(subscription) }
+      const email = session.user.email || ''
+      if (!AUTHORIZED_RECEPTION_EMAILS.includes(email)) {
+        setIsAuthorized(false)
+        setLoading(false)
+        return
+      }
+
+      const municipio = EMAIL_TO_MUNICIPIO[email]
+      setUserMunicipio(municipio)
+      setIsAuthorized(true)
+      
+      await buscarDadosFila(municipio)
+      setLoading(false)
+
+      subscription = supabase.channel('recepcao_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'agendamentos' }, () => {
+          buscarDadosFila(municipio)
+        })
+        .subscribe()
+    }
+
+    checkAccessAndFetch()
+
+    return () => { 
+      if (subscription) supabase.removeChannel(subscription) 
+    }
   }, [])
 
-  const carregarProfissionais = async () => {
-    const { data } = await supabase
-      .from('escalas_medicas')
-      .select('profissional')
-    if (data) {
-      setProfissionais([...new Set(data.map(r => r.profissional))].sort())
-    }
-  }
-
-  const buscarDadosFila = async () => {
+  const buscarDadosFila = async (municipio: string) => {
     try {
       const hoje = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }).split('/').reverse().join('-') 
       
+      // Busca todos os agendamentos de hoje que não foram finalizados
       const { data: agendamentosData, error } = await supabase
         .from('agendamentos')
         .select('*')
-        .eq('data_agendamento', hoje) // Puxa a fila do dia
-        .neq('status', 'finalizado')  // Oculta os já finalizados
+        .eq('data_agendamento', hoje) 
+        .neq('status', 'finalizado')  
         .order('horario_agendamento', { ascending: true })
 
       if (error) throw error
       if (!agendamentosData) { setAgendamentos([]); return }
 
-      const cpfs = [...new Set(agendamentosData.map((a: any) => a.paciente_cpf).filter(Boolean))]
+      // FILTRAGEM POR MUNICÍPIO: O profissional deve ser do município do usuário
+      // O formato é "Nome (Município)"
+      const filteredByMunicipio = agendamentosData.filter((ag: any) => {
+        if (!ag.profissional) return false
+        return ag.profissional.includes(`(${municipio})`)
+      })
+
+      const cpfs = [...new Set(filteredByMunicipio.map((a: any) => a.paciente_cpf).filter(Boolean))]
       
       const { data: pacientesData } = await supabase
         .from('pacientes')
         .select('cpf, nome_completo, telefone')
         .in('cpf', cpfs)
 
-      setAgendamentos(agendamentosData.map((ag: any) => ({
+      setAgendamentos(filteredByMunicipio.map((ag: any) => ({
         ...ag,
         paciente: pacientesData?.find((p: Paciente) => p.cpf === ag.paciente_cpf),
       })))
     } catch (error) {
       showToast('Erro ao carregar a fila.', 'error')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -111,7 +144,7 @@ export default function RecepcaoPage() {
       if (error) throw error
       
       showToast('Check-in realizado! Paciente enviado para o médico.', 'success')
-      buscarDadosFila()
+      buscarDadosFila(userMunicipio)
     } catch {
       showToast('Erro ao fazer check-in.', 'error')
     }
@@ -125,7 +158,7 @@ export default function RecepcaoPage() {
       if (error) throw error
       
       showToast('Falta registrada e horário liberado.', 'info')
-      buscarDadosFila()
+      buscarDadosFila(userMunicipio)
     } catch {
       showToast('Erro ao registrar falta.', 'error')
     }
@@ -133,14 +166,11 @@ export default function RecepcaoPage() {
 
   const formatarCPF = (c: string) => c ? c.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4') : ''
 
-  // APLICA OS DOIS FILTROS: Busca (Nome/CPF) e Profissional
+  // APLICA O FILTRO DE BUSCA (Nome/CPF)
   const agendamentosFiltrados = agendamentos.filter(ag => {
     const matchBusca = (ag.paciente?.nome_completo || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                        (ag.paciente_cpf || '').includes(searchTerm);
-    
-    const matchProfissional = profissionalFilter === 'todos' || ag.profissional === profissionalFilter;
-
-    return matchBusca && matchProfissional;
+    return matchBusca;
   })
 
   // Os contadores agora usam os dados filtrados para refletirem a realidade do que está na tela!
@@ -150,7 +180,25 @@ export default function RecepcaoPage() {
   if (loading) return (
     <div className="h-screen flex flex-col items-center justify-center gap-3 bg-gray-50">
       <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: C.pink100, borderTopColor: C.pink400 }} />
-      <p className="text-sm font-medium text-gray-400">Carregando recepção…</p>
+      <p className="text-sm font-medium text-gray-400">Verificando acesso…</p>
+    </div>
+  )
+
+  if (isAuthorized === false) return (
+    <div className="h-[70vh] flex flex-col items-center justify-center p-6 text-center">
+      <div className="bg-red-50 p-6 rounded-3xl border border-red-100 flex flex-col items-center max-w-md animate-in fade-in zoom-in">
+        <ShieldAlert size={48} className="text-red-500 mb-4" />
+        <h2 className="text-xl font-bold text-red-900 mb-2">Acesso Restrito</h2>
+        <p className="text-sm text-red-700 leading-relaxed">
+          Esta página é exclusiva para a recepção municipal. Seu usuário não possui autorização para acessar esta área.
+        </p>
+        <button 
+          onClick={() => router.push('/dashboard')}
+          className="mt-6 px-6 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+        >
+          Voltar ao Painel
+        </button>
+      </div>
     </div>
   )
 
@@ -178,7 +226,7 @@ export default function RecepcaoPage() {
         <div>
           <h1 className="font-extrabold text-2xl" style={{ color: C.gray800 }}>Recepção & Check-in</h1>
           <p className="text-sm font-medium mt-1" style={{ color: C.gray500 }}>
-            Confirme a chegada dos pacientes para enviá-los ao médico.
+            Painel exclusivo: <span className="font-bold text-pink-600">{userMunicipio}</span>
           </p>
         </div>
         
@@ -193,38 +241,17 @@ export default function RecepcaoPage() {
         </div>
       </div>
 
-      {/* ── Filtros (Busca e Profissional) ── */}
-      <div className="flex flex-col sm:flex-row gap-4 w-full bg-white p-4 rounded-2xl border shadow-sm" style={{ borderColor: C.gray200 }}>
+      {/* ── Filtros (Busca) ── */}
+      <div className="bg-white p-4 rounded-2xl border shadow-sm" style={{ borderColor: C.gray200 }}>
         
         {/* Campo de Busca */}
-        <div className="relative flex-1">
+        <div className="relative">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
-            type="text" placeholder="Buscar paciente por nome ou CPF..."
+            type="text" placeholder="Buscar paciente na fila por nome ou CPF..."
             value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 outline-none text-sm font-medium focus:border-pink-400 focus:ring-4 focus:ring-pink-50 transition-all bg-gray-50"
           />
-        </div>
-
-        {/* Dropdown Profissional */}
-        <div className="relative sm:w-72">
-          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-pink-600">
-            <Stethoscope size={16} />
-          </div>
-          <select
-            value={profissionalFilter}
-            onChange={e => setProfissionalFilter(e.target.value)}
-            className="w-full pl-10 pr-10 py-2.5 rounded-xl border outline-none text-sm font-bold text-gray-700 appearance-none cursor-pointer focus:border-pink-400 focus:ring-4 focus:ring-pink-50 transition-all"
-            style={{ borderColor: profissionalFilter !== 'todos' ? C.pink400 : C.gray200, backgroundColor: profissionalFilter !== 'todos' ? C.pink50 : '#F9FAFB' }}
-          >
-            <option value="todos">Todos os Profissionais</option>
-            {profissionais.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-          <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-            <ChevronDown size={16} />
-          </div>
         </div>
 
       </div>

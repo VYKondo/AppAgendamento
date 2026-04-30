@@ -150,36 +150,15 @@ export default function AgendamentoPage() {
   const espacosVazios     = Array.from({ length: primeiroDiaDoMes })
   const dias              = Array.from({ length: diasNoMes }, (_, i) => i + 1)
 
-  // ─── Carregar profissionais únicos da tabela escalas_medicas ──
+  // ─── Carregar profissionais únicos (Fixos) ──
   useEffect(() => {
-    const carregarProfissionais = async () => {
-      setCarregandoProfissionais(true)
-      try {
-        const { data, error } = await supabase
-          .from('escalas_medicas')
-          .select('profissional')
-          .order('profissional')
-
-        if (error) throw error
-
-        // Deduplica e constrói a lista
-        const nomesUnicos = [...new Set((data ?? []).map((r: { profissional: string }) => r.profissional))]
-        const profissionais: Profissional[] = nomesUnicos.map(nome => {
-          // O campo "profissional" pode ter formato "Nome (Município)"
-          const match = nome.match(/^(.+?)\s*\((.+?)\)$/)
-          if (match) {
-            return { nome: match[1].trim(), municipio: match[2].trim(), iniciais: gerarIniciais(match[1].trim()) }
-          }
-          return { nome, municipio: '', iniciais: gerarIniciais(nome) }
-        })
-        setListaProfissionais(profissionais)
-      } catch {
-        showToast('Erro ao carregar profissionais disponíveis.', 'error')
-      } finally {
-        setCarregandoProfissionais(false)
-      }
-    }
-    carregarProfissionais()
+    const profissionais: Profissional[] = [
+      { nome: 'Adriana', municipio: 'Ribeirão', iniciais: 'AD' },
+      { nome: 'Gleiciane', municipio: 'Grandes Rios', iniciais: 'GL' },
+      { nome: 'Carlos', municipio: 'Flórida', iniciais: 'CA' }
+    ]
+    setListaProfissionais(profissionais)
+    setCarregandoProfissionais(false)
   }, [])
 
   // ─── Carregar escalas quando o profissional muda ──────────────

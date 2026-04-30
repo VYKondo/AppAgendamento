@@ -127,8 +127,12 @@ export default function ConsultasPage() {
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Profissionais carregados dinamicamente do banco
-  const [profissionais, setProfissionais] = useState<string[]>([])
+  // Profissionais fixos
+  const profissionais = [
+    'Adriana (Ribeirão)',
+    'Gleiciane (Grandes Rios)',
+    'Carlos (Flórida)'
+  ].sort()
 
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('todos')
@@ -158,17 +162,7 @@ export default function ConsultasPage() {
 
   useEffect(() => {
     verificarAcessoEBuscarDados()
-    carregarProfissionais()
   }, [])
-
-  const carregarProfissionais = async () => {
-    const { data } = await supabase
-      .from('escalas_medicas')
-      .select('profissional')
-    if (data) {
-      setProfissionais([...new Set(data.map(r => r.profissional))].sort())
-    }
-  }
 
   // ─── REALTIME: UPDATE, INSERT e DELETE ───
   useEffect(() => {

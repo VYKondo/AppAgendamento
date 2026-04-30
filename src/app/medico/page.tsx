@@ -2,12 +2,14 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Ribbon, Mail, Lock, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 
 export default function MedicoLoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirectTo') || '/dashboard/consultas'
   
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -31,8 +33,8 @@ export default function MedicoLoginPage() {
         throw new Error('E-mail ou senha incorretos. Acesso negado.')
       }
 
-      // Se deu tudo certo, redirecionamos para o Painel do Médico
-      router.push('/dashboard/consultas')
+      // Se deu tudo certo, redirecionamos para o destino (ou padrão Consultas)
+      router.push(redirectTo)
       
     } catch (err: any) {
       console.error("Erro no login:", err)
