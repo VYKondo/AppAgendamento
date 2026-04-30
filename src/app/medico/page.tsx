@@ -1,16 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Ribbon, Mail, Lock, Loader2, AlertCircle, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 
-export default function MedicoLoginPage() {
+function MedicoLoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirectTo') || '/dashboard/consultas'
-  
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -35,7 +35,7 @@ export default function MedicoLoginPage() {
 
       // Se deu tudo certo, redirecionamos para o destino (ou padrão Consultas)
       router.push(redirectTo)
-      
+
     } catch (err: any) {
       console.error("Erro no login:", err)
       setError(err.message || 'Ocorreu um erro inesperado. Tente novamente.')
@@ -47,14 +47,14 @@ export default function MedicoLoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md px-4">
-        
+
         <Link href="/" className="flex justify-center items-center gap-3 mb-6 group">
           <div className="bg-primary/10 p-2 rounded-xl group-hover:bg-primary/20 transition-colors">
             <Ribbon className="text-primary w-8 h-8" />
           </div>
           <span className="font-heading font-bold text-2xl text-textBase">Câncer de Mama</span>
         </Link>
-        
+
         <h2 className="text-center text-3xl font-heading font-extrabold text-textBase flex items-center justify-center gap-3">
           <ShieldCheck className="text-primary" size={32} />
           Portal do Médico
@@ -66,7 +66,7 @@ export default function MedicoLoginPage() {
 
       <div className="mt-8 sm:mx-auto w-full px-4 sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-xl shadow-gray-200/50 border border-gray-100 sm:rounded-2xl sm:px-10">
-          
+
           {error && (
             <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm flex items-start gap-3 animate-in fade-in slide-in-from-top-1">
               <AlertCircle className="shrink-0 mt-0.5" size={18} /> 
@@ -75,7 +75,7 @@ export default function MedicoLoginPage() {
           )}
 
           <form className="space-y-6" onSubmit={handleLogin}>
-            
+
             {/* CAMPO DE E-MAIL */}
             <div>
               <label className="block text-sm font-semibold text-gray-700">E-mail Profissional</label>
@@ -110,7 +110,7 @@ export default function MedicoLoginPage() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              
+
               {/* RECUPERAÇÃO DE SENHA */}
               <div className="mt-3 flex justify-end">
                 <Link 
@@ -142,4 +142,17 @@ export default function MedicoLoginPage() {
       </div>
     </div>
   )
-} 
+}
+
+export default function MedicoLoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="animate-spin text-primary" size={40} />
+      </div>
+    }>
+      <MedicoLoginContent />
+    </Suspense>
+  )
+}
+ 
