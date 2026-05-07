@@ -186,6 +186,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {/* BOTÕES DE AÇÃO (DIREITA) */}
           <div className={`flex items-center gap-4 ${(isRecepcaoPage || isReceptionist) ? 'w-full justify-end' : ''}`}>
 
+            {/* EMAIL DO USUÁRIO - DESKTOP (Sutil) */}
+            {!isLoadingAuth && isAuthenticated && userEmail && (
+              <div className="hidden lg:flex flex-col items-end leading-tight border-r border-gray-100 pr-4">
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Acesso</span>
+                <span className="text-xs text-gray-500 font-medium max-w-[150px] truncate" title={userEmail}>
+                  {userEmail}
+                </span>
+              </div>
+            )}
+
             {/* BOTÃO DE SAIR - MÉDICO / RECEPÇÃO */}
             {!isLoadingAuth && isAuthenticated && (
               <button 
@@ -243,6 +253,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {/* Links do Mobile */}
           <nav className="flex flex-col px-4 py-6 gap-2">
+            {/* EMAIL DO USUÁRIO - MOBILE (Sutil) */}
+            {!isLoadingAuth && isAuthenticated && userEmail && (
+              <div className="px-4 py-3 mb-4 bg-gray-50 rounded-xl border border-gray-100">
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold block mb-0.5">Conectado como:</span>
+                <span className="text-sm text-gray-600 font-medium break-all">{userEmail}</span>
+              </div>
+            )}
+
             {!isReceptionist && (
               <>
                 <Link 
