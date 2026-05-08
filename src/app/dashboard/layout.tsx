@@ -23,9 +23,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [hasPatientToken, setHasPatientToken] = useState(false)
 
   const RECEPTION_EMAILS = [
-    'agenda.preventivorb@gmail.com',
-    'agenda.preventivofi@gmail.com',
-    'agenda.preventivogr@gmail.com'
+    'agendamento.preventivorb@gmail.com',
+    'agendamento.preventivofi@gmail.com',
+    'agendamento.preventivogr@gmail.com'
   ]
 
   useEffect(() => {
