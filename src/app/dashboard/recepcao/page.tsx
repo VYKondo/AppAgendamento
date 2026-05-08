@@ -11,9 +11,9 @@ import { C } from '@/styles/palette'
 
 // ── Mapeamento de E-mails para Municípios ──────────────────────
 const EMAIL_TO_MUNICIPIO: Record<string, string> = {
-  'agenda.preventivorb@gmail.com': 'Flórida',
-  'agenda.preventivofi@gmail.com': 'Ribeirão',
-  'agenda.preventivogr@gmail.com': 'Grandes Rios'
+  'agendamento.preventivofl@gmail.com': 'Flórida',
+  'agendamento.preventivorb@gmail.com': 'Ribeirão',
+  'agendamento.preventivogr@gmail.com': 'Grandes Rios'
 }
 
 const AUTHORIZED_RECEPTION_EMAILS = Object.keys(EMAIL_TO_MUNICIPIO)
