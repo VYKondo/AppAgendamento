@@ -36,9 +36,10 @@ function MedicoLoginContent() {
       // Se deu tudo certo, redirecionamos para o destino (ou padrão Consultas)
       router.push(redirectTo)
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Erro no login:", err)
-      setError(err.message || 'Ocorreu um erro inesperado. Tente novamente.')
+      const error = err as Error
+      setError(error.message || 'Ocorreu um erro inesperado. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -78,34 +79,39 @@ function MedicoLoginContent() {
 
             {/* CAMPO DE E-MAIL */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700">E-mail Profissional</label>
-              <div className="mt-1.5 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+              <label htmlFor="email" className="block text-sm font-bold text-gray-700 mb-1.5">E-mail Profissional</label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
                   <Mail size={18} />
                 </div>
                 <input
+                  id="email"
                   type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary bg-white outline-none text-sm shadow-sm transition-all"
+                  className="block w-full pl-11 pr-3 py-3.5 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary bg-white outline-none text-sm font-medium shadow-sm transition-all"
                   placeholder="doutor@clinica.com"
+                  autoComplete="email"
                 />
               </div>
             </div>
 
             {/* CAMPO DE SENHA */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700">Senha</label>
-              <div className="mt-1.5 relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+              <label htmlFor="password" className="block text-sm font-bold text-gray-700 mb-1.5">Senha</label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400 group-focus-within:text-primary transition-colors">
                   <Lock size={18} />
                 </div>
                 <input
+                  id="password"
                   type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-10 py-3 border border-gray-300 rounded-xl focus:ring-4 focus:ring-primary/20 focus:border-primary bg-white outline-none text-sm shadow-sm transition-all"
+                  className="block w-full pl-11 pr-12 py-3.5 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary/10 focus:border-primary bg-white outline-none text-sm font-medium shadow-sm transition-all"
                   placeholder="••••••••"
+                  autoComplete="current-password"
                 />
                 <button
                   type="button" onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-gray-400 hover:text-primary focus:outline-none transition-colors"
+                  aria-label={showPassword ? "Esconder senha" : "Mostrar senha"}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -115,7 +121,7 @@ function MedicoLoginContent() {
               <div className="mt-3 flex justify-end">
                 <Link 
                   href="/esqueci-senha" 
-                  className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                  className="text-xs font-bold text-primary hover:text-primary-dark transition-colors"
                 >
                   Esqueceu sua senha?
                 </Link>
@@ -127,12 +133,12 @@ function MedicoLoginContent() {
               <button
                 type="submit"
                 disabled={loading || !email || !password}
-                className="w-full flex justify-center items-center gap-2 py-3.5 px-4 border border-transparent rounded-xl shadow-lg shadow-primary/30 text-sm font-bold text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:-translate-y-0.5 disabled:hover:translate-y-0"
+                className="w-full flex justify-center items-center gap-2 py-4 px-4 rounded-2xl shadow-premium text-sm font-extrabold text-white bg-primary hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:-translate-y-1 active:translate-y-0 disabled:hover:translate-y-0"
               >
                 {loading ? (
                   <><Loader2 className="animate-spin" size={20} /> Autenticando...</>
                 ) : (
-                  'Acessar Sistema'
+                  'Acessar Sistema Profissional'
                 )}
               </button>
             </div>

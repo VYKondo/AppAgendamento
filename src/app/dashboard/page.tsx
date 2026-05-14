@@ -1,10 +1,20 @@
 import Link from 'next/link'
+import { Metadata } from 'next'
 import {
   Info, ShieldPlus, ArrowRight, PlayCircle, Check,
   Activity, Network, Microscope, HeartHandshake,
   CalendarCheck, Phone, ChevronRight, Ribbon
 } from 'lucide-react'
 import { C } from '@/styles/palette'
+
+export const metadata: Metadata = {
+  title: "Início",
+  description: "Portal integrado de saúde para prevenção, diagnóstico e acompanhamento do câncer de mama em Grandes Rios e região.",
+  openGraph: {
+    title: "Cuidar de você é a nossa missão | Fatec Biomedicina",
+    description: "Agende sua mamografia e exames preventivos de forma rápida e segura no portal Fatec Saúde.",
+  }
+}
 
 const INFO_CARDS = [
   {
@@ -124,11 +134,12 @@ export default function DashboardHome() {
             </div>
 
             {/* Mini-stats inline */}
-            <div className="flex flex-wrap gap-6 pt-2 border-t" style={{ borderColor: C.gray100 }}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6 border-t" style={{ borderColor: C.gray100 }}>
               {STATS.map(s => (
-                <div key={s.label} className="pt-4">
-                  <p className="font-heading font-extrabold text-2xl" style={{ color: C.pink600 }}>{s.value}</p>
-                  <p className="text-xs font-medium" style={{ color: C.gray400 }}>{s.label}</p>
+                <div key={s.label}>
+                  <p className="font-heading font-extrabold text-3xl" style={{ color: C.pink600 }}>{s.value}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider mt-1" style={{ color: C.gray400 }}>{s.label}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{s.sub}</p>
                 </div>
               ))}
             </div>

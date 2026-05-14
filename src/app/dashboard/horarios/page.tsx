@@ -346,8 +346,9 @@ export default function AgendaMedicaPage() {
   }, [profissionalSelecionado])
 
   // ── Helpers de leitura ────────────────────────────────────────────────────
-  const getSlotsAtivos = (key: string) =>
-    agenda[key]?.slots.filter(s => s.ativo).length ?? 0
+  const getSlotsAtivos = useCallback((key: string) =>
+    agenda[key]?.slots.filter(s => s.ativo).length ?? 0,
+  [agenda])
 
   const isSlotAtivo = useCallback((key: string, hora: string) =>
     agenda[key]?.slots.find(s => s.hora === hora)?.ativo ?? false,
@@ -445,22 +446,28 @@ export default function AgendaMedicaPage() {
     else setCalMonth(m => m + 1)
   }
 
-  const cellsDayMonth = (() => {
+  const cellsDayMonth = useMemo(() => {
     const firstDow  = new Date(calYear, calMonth, 1).getDay()
     const totalDays = new Date(calYear, calMonth + 1, 0).getDate()
     const cells: (number | null)[] = []
     for (let i = 0; i < firstDow; i++) cells.push(null)
     for (let d = 1; d <= totalDays; d++) cells.push(d)
     return cells
-  })()
+  }, [calYear, calMonth])
 
-  const totalVagasMes = cellsDayMonth.reduce<number>((acc, d) => {
-    if (!d) return acc
-    return acc + getSlotsAtivos(dateKey(calYear, calMonth, d))
-  }, 0)
+  const statsMes = useMemo(() => {
+    const totalVagasMes = cellsDayMonth.reduce<number>((acc, d) => {
+      if (!d) return acc
+      return acc + getSlotsAtivos(dateKey(calYear, calMonth, d))
+    }, 0)
 
-  const totalVagasGeral = Object.values(agenda)
-    .reduce<number>((acc, dia) => acc + dia.slots.filter(s => s.ativo).length, 0)
+    const totalVagasGeral = Object.values(agenda)
+      .reduce<number>((acc, dia) => acc + dia.slots.filter(s => s.ativo).length, 0)
+    
+    return { totalVagasMes, totalVagasGeral }
+  }, [cellsDayMonth, calYear, calMonth, agenda, getSlotsAtivos])
+
+  const { totalVagasMes, totalVagasGeral } = statsMes;
 
   // Profissional selecionado parseado para exibição
   const profissionalAtual = useMemo(() => {

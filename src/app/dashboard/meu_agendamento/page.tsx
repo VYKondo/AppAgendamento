@@ -29,32 +29,30 @@ function salvarAgendamentos(cpf: string, agendamentos: AgendamentoLocal[]) {
 
 export default function MeusAgendamentosPage() {
   const router = useRouter()
+  
+  // Pattern para evitar useEffect no carregamento inicial de dados síncronos (localStorage)
+  const [init, setInit] = useState(false)
   const [agendamentos, setAgendamentos] = useState<AgendamentoLocal[]>([])
   const [loading, setLoading] = useState(true)
   const [cpfToken, setCpfToken] = useState<string | null>(null)
 
-  useEffect(() => {
+  if (typeof window !== 'undefined' && !init) {
+    setInit(true)
     const token = localStorage.getItem(STORAGE_KEY_PATIENT_TOKEN)
-    if (!token) {
-      setLoading(false)
-      return
+    if (token) {
+      setCpfToken(token)
+      let lista = carregarAgendamentos(token)
+      const hoje = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+      hoje.setHours(0, 0, 0, 0)
+      lista = lista.filter(ag => {
+        const [ano, mes, dia] = ag.data_agendamento.split('-').map(Number)
+        return new Date(ano, mes - 1, dia) >= hoje
+      })
+      salvarAgendamentos(token, lista)
+      setAgendamentos(lista)
     }
-    setCpfToken(token)
-
-    // Carrega do localStorage e remove consultas cujo dia já passou
-    let lista = carregarAgendamentos(token)
-    const hoje = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-    hoje.setHours(0, 0, 0, 0)
-
-    lista = lista.filter(ag => {
-      const [ano, mes, dia] = ag.data_agendamento.split('-').map(Number)
-      return new Date(ano, mes - 1, dia) >= hoje
-    })
-
-    salvarAgendamentos(token, lista)
-    setAgendamentos(lista)
     setLoading(false)
-  }, [])
+  }
 
   const formatarData = (data: string) => data.split('-').reverse().join('/')
   const formatarHora = (hora: string) => hora.substring(0, 5)

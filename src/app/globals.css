@@ -1,11 +1,13 @@
   @import "tailwindcss";
 
   @theme {
-    /* Cores Institucionais */
+    /* Cores Institucionais - Sincronizadas com palette.ts */
     --color-primary: #E84393;
+    --color-primary-light: #FDF0F7;
+    --color-primary-dark: #AD1457;
     --color-secondary: #F8A5C2;
     --color-background: #F8F9FA;
-    --color-textBase: #2C3E50;
+    --color-textBase: #18181B;
     --color-success: #2ECC71;
     --color-danger: #E74C3C;
     --color-info: #3498DB;
@@ -16,12 +18,14 @@
 
     /* Sombras Customizadas */
     --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
-    --shadow-hover: 0 10px 40px -5px rgba(232, 67, 147, 0.15);
+    --shadow-premium: 0 20px 50px -12px rgba(232, 67, 147, 0.12);
+    --shadow-hover: 0 10px 40px -5px rgba(232, 67, 147, 0.2);
 
     /* Animações */
     --animate-fade-in: fadeIn 0.5s ease-out forwards;
     --animate-slide-up: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     --animate-pulse-slow: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    --animate-float: float 6s ease-in-out infinite;
 
     @keyframes fadeIn {
       0% { opacity: 0; }
@@ -32,19 +36,48 @@
       0% { opacity: 0; transform: translateY(20px); }
       100% { opacity: 1; transform: translateY(0); }
     }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
   }
 
-  /* Fundo da Página com a Textura */
+  /* Reset and Base Styles */
   body {
     background-color: var(--color-background);
-    background-image: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23e84393' fill-opacity='0.2' fill-rule='evenodd'%3E%3Ccircle cx='2' cy='2' r='1.5'/%3E%3Ccircle cx='14' cy='14' r='1.5'/%3E%3C/g%3E%3C/svg%3E");
+    background-image: 
+      radial-gradient(circle at 10% 20%, rgba(232, 67, 147, 0.03) 0%, transparent 20%),
+      radial-gradient(circle at 90% 80%, rgba(232, 67, 147, 0.03) 0%, transparent 20%),
+      url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 20.5V18H18v2.5h-2.5v2h2.5V25h2v-2.5H25v-2h-2.5zm-16.5-16h2v-2h2v2h2v2h-2v2h-2v-2h-2v-2zm16-16h2v-2h2v2h2v2h-2v2h-2v-2h-2v-2z' fill='%23e84393' fill-opacity='0.03' fill-rule='evenodd'/%3E%3C/svg%3E");
+    color: var(--color-textBase);
+    overflow-x: hidden;
+  }
+
+  /* Focus States and Accessibility */
+  *:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(232, 67, 147, 0.15);
   }
 
   /* Custom Scrollbar */
-  ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-track { background: #f1f1f1; }
-  ::-webkit-scrollbar-thumb { background: var(--color-secondary); border-radius: 10px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--color-primary); }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { 
+    background: #E4E4E7; 
+    border-radius: 10px;
+    border: 3px solid var(--color-background);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-secondary); }
+
+  /* Utility Classes */
+  .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
 
   /* Rádios customizados */
   .sr-only-radio:checked + div {
