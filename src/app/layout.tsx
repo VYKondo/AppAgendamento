@@ -12,7 +12,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://agendamento-fatec.vercel.app'),
+  metadataBase: new URL('https://portaldasaude.vercel.app'),
   title: {
     default: "Fatec Biomedicina | Rastreio Preventivo",
     template: "%s | Fatec Biomedicina"
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Fatec Biomedicina | Rastreio Preventivo",
     description: "Portal integrado para o combate ao câncer de mama. Agende sua mamografia e exames preventivos online.",
-    url: 'https://agendamento-fatec.vercel.app',
+    url: 'https://portaldasaude.vercel.app',
     siteName: 'Fatec Saúde',
     locale: 'pt_BR',
     type: 'website',

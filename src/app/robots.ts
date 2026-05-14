@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/api/', '/dashboard/recepcao', '/dashboard/consultas', '/dashboard/horarios'],
     },
-    sitemap: 'https://agendamento-fatec.vercel.app/sitemap.xml',
+    sitemap: 'https://portaldasaude.vercel.app/sitemap.xml',
   }
 }

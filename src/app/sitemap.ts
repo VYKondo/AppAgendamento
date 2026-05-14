@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://agendamento-fatec.vercel.app'
+  const baseUrl = 'https://portaldasaude.vercel.app'
   
   return [
     {
