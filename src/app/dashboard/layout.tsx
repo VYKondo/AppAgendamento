@@ -37,7 +37,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         // Redirecionamento automático para recepção se for recepcionista
         if (email && (RECEPTION_EMAILS as readonly string[]).includes(email)) {
-          if (!pathname.startsWith('/dashboard/recepcao')) {
+          const isAllowedPath = pathname.startsWith('/dashboard/recepcao') || 
+                               pathname.startsWith('/dashboard/agendamento') || 
+                               pathname.startsWith('/dashboard/consultas')
+          
+          if (!isAllowedPath) {
             router.push('/dashboard/recepcao')
           }
         }
@@ -58,7 +62,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         })
 
         if (email && (RECEPTION_EMAILS as readonly string[]).includes(email)) {
-          if (!pathname.startsWith('/dashboard/recepcao')) {
+          const isAllowedPath = pathname.startsWith('/dashboard/recepcao') || 
+                               pathname.startsWith('/dashboard/agendamento') || 
+                               pathname.startsWith('/dashboard/consultas')
+          
+          if (!isAllowedPath) {
             router.push('/dashboard/recepcao')
           }
         }
@@ -103,14 +111,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const isReceptionist = userEmail && (RECEPTION_EMAILS as readonly string[]).includes(userEmail)
   const isRecepcaoPage = pathname === '/dashboard/recepcao'
 
+  // Configuração dinâmica de links baseada no papel do usuário
+  const NAV_LINKS = [
+    { label: 'Recepção', href: '/dashboard/recepcao', show: isReceptionist },
+    { label: 'Início', href: '/dashboard', show: !isReceptionist },
+    { label: 'Agendar', href: '/dashboard/agendamento', show: true },
+    { label: 'Meu agendamento', href: '/dashboard/meu_agendamento', show: !isAuthenticated && !isLoadingAuth && !isReceptionist },
+    { label: 'Consultas', href: '/dashboard/consultas', show: isAuthenticated },
+    { label: 'Horários', href: '/dashboard/horarios', show: isAuthenticated && !isReceptionist }
+  ].filter(link => link.show)
+
   return (
     <div className="min-h-screen flex flex-col antialiased">
       <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 h-20 flex justify-between items-center">
 
           {/* LOGO */}
-          {(!isRecepcaoPage && !isReceptionist) && (
-            <Link href="/dashboard" className="flex items-center gap-3 group">
+          {(!isRecepcaoPage || isReceptionist) && (
+            <Link href={isReceptionist ? "/dashboard/recepcao" : "/dashboard"} className="flex items-center gap-3 group">
               <div className="bg-pink-600/10 p-2 rounded-xl group-hover:bg-pink-600/20 transition-colors">
                 <Ribbon className="text-pink-600 w-6 h-6" />
               </div>
@@ -121,15 +139,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
 
           {/* NAVEGAÇÃO DESKTOP */}
-          {(!isRecepcaoPage && !isReceptionist) && (
+          {(!isRecepcaoPage || isReceptionist) && (
             <nav className="hidden lg:flex items-center space-x-1">
-              {[
-                { label: 'Início', href: '/dashboard' },
-                { label: 'Agendar', href: '/dashboard/agendamento' },
-                { label: 'Meu agendamento', href: '/dashboard/meu_agendamento', hidden: isAuthenticated || isLoadingAuth },
-                { label: 'Consultas', href: '/dashboard/consultas', hidden: !isAuthenticated },
-                { label: 'Horários', href: '/dashboard/horarios', hidden: !isAuthenticated }
-              ].map(link => !link.hidden && (
+              {NAV_LINKS.map(link => (
                 <Link 
                   key={link.href}
                   href={link.href} 
@@ -146,7 +158,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
 
           {/* BOTÕES DE AÇÃO */}
-          <div className={`flex items-center gap-4 ${(isRecepcaoPage || isReceptionist) ? 'w-full justify-end' : ''}`}>
+          <div className={`flex items-center gap-4 ${(isRecepcaoPage && !isReceptionist) ? 'w-full justify-end' : ''}`}>
             {!isLoadingAuth && isAuthenticated && userEmail && (
               <div className="hidden lg:flex flex-col items-end leading-tight border-r border-gray-100 pr-4 text-right">
                 <span className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Autenticado</span>
@@ -163,7 +175,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </button>
             )}
 
-            {(!isRecepcaoPage && !isReceptionist) && (
+            {(!isRecepcaoPage || isReceptionist) && (
               <button 
                 onClick={() => setIsMobileMenuOpen(true)}
                 className="lg:hidden text-gray-600 hover:text-pink-600 p-2 bg-gray-50 rounded-xl"
@@ -187,21 +199,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
 
           <nav className="flex flex-col p-4 gap-2">
-            {!isReceptionist && (
-              <>
-                <Link href="/dashboard" className={`p-4 rounded-xl font-bold ${pathname === '/dashboard' ? 'bg-pink-50 text-pink-600' : 'text-gray-600'}`}>Início</Link>
-                <Link href="/dashboard/agendamento" className={`p-4 rounded-xl font-bold ${pathname === '/dashboard/agendamento' ? 'bg-pink-50 text-pink-600' : 'text-gray-600'}`}>Agendar</Link>
-                {!isAuthenticated && (
-                  <Link href="/dashboard/meu_agendamento" className={`p-4 rounded-xl font-bold ${pathname === '/dashboard/meu_agendamento' ? 'bg-pink-50 text-pink-600' : 'text-gray-600'}`}>Meu agendamento</Link>
-                )}
-                {isAuthenticated && (
-                  <>
-                    <Link href="/dashboard/consultas" className={`p-4 rounded-xl font-bold ${pathname === '/dashboard/consultas' ? 'bg-pink-50 text-pink-600' : 'text-gray-600'}`}>Consultas</Link>
-                    <Link href="/dashboard/horarios" className={`p-4 rounded-xl font-bold ${pathname === '/dashboard/horarios' ? 'bg-pink-50 text-pink-600' : 'text-gray-600'}`}>Horários</Link>
-                  </>
-                )}
-              </>
-            )}
+            {NAV_LINKS.map(link => (
+              <Link 
+                key={link.href}
+                href={link.href} 
+                className={`p-4 rounded-xl font-bold ${pathname === link.href ? 'bg-pink-50 text-pink-600' : 'text-gray-600'}`}
+              >
+                {link.label}
+              </Link>
+            ))}
             <hr className="my-2 border-gray-100" />
             {(isAuthenticated || hasPatientToken) && (
               <button onClick={isAuthenticated ? handleLogout : handleSairPaciente} className="flex items-center gap-3 p-4 rounded-xl font-bold text-red-600 active:bg-red-50">

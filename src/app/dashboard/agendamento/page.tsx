@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation'
 import { useAgendamento } from '@/hooks/useAgendamento'
 import { supabase } from '@/lib/supabase'
 import { STORAGE_KEY_PATIENT_TOKEN, STORAGE_KEY_AGENDAMENTOS } from '@/lib/storage'
-import { ArrowLeft, ArrowRight, Check, Loader2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Loader2, Printer } from 'lucide-react'
 import { sanitizeString, sanitizeNumeric, validateCPF, validateCNS } from '@/utils/security'
 import dynamic from 'next/dynamic'
+import AppointmentReceipt from '@/components/agendamento/AppointmentReceipt'
 
 // Components - Carregados dinamicamente para performance
 const PatientIdentification = dynamic(() => import('@/components/agendamento/PatientIdentification'), { ssr: false })
@@ -33,6 +34,7 @@ export default function AgendamentoPage() {
   const [verificandoCpf, setVerificandoCpf] = useState(false)
   const [profissionalSelecionado, setProfissionalSelecionado] = useState('')
   const [loadingCep, setLoadingCep] = useState(false)
+  const [pacienteNomeCompleto, setPacienteNomeCompleto] = useState('') // Para o comprovante
 
   // Form Data
   const [patientData, setPatientData] = useState({
@@ -58,6 +60,7 @@ export default function AgendamentoPage() {
   })
 
   const handlePatientDataChange = (field: string, value: string | boolean) => {
+    if (field === 'nomeCompleto') setPacienteNomeCompleto(value as string)
     setPatientData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -87,6 +90,8 @@ export default function AgendamentoPage() {
 
       if (data) {
         const nomeCompleto = data.nome_completo || ''
+        setPacienteNomeCompleto(nomeCompleto) // Salva nome real para o comprovante
+        
         const partes = nomeCompleto.split(' ')
         const nomeMascarado = partes.length > 1 
           ? `${partes[0]} ${partes[1][0]}.***` 
@@ -225,7 +230,13 @@ export default function AgendamentoPage() {
         localStorage.setItem(`${STORAGE_KEY_AGENDAMENTOS}_${cpfLimpo}`, JSON.stringify(lista))
       }
 
-      setProtocolo(`#AGD-${Math.floor(Math.random() * 9000) + 1000}`)
+      // Geração de protocolo baseada nos dados (DDMMYY + final do CPF + HoraMin)
+      const dataLink = formData.dia.split('-') // [YYYY, MM, DD]
+      const diaMesAno = `${dataLink[2]}${dataLink[1]}${dataLink[0].slice(2)}`
+      const finalCpf = cpfLimpo.slice(-4)
+      const horaMin = formData.horario.replace(':', '')
+      
+      setProtocolo(`#AGD-${diaMesAno}-${finalCpf}-${horaMin}`)
       setMostrarConfirmacao(true)
     } catch (error) {
       showToast('Ocorreu um erro ao salvar o agendamento. Tente novamente.', 'error')
@@ -238,6 +249,7 @@ export default function AgendamentoPage() {
   const resetarFormulario = () => {
     setStatusPaciente('pendente')
     setCpf('')
+    setPacienteNomeCompleto('')
     setPatientData({
       nomeCompleto: '', nomeSocial: '', cns: '', dataNascimento: '', nacionalidade: '',
       identidadeGenero: '', orientacaoSexual: '', nomeMae: '', motherNotDeclared: false,
@@ -252,6 +264,10 @@ export default function AgendamentoPage() {
     setMostrarConfirmacao(false)
     resetarFormulario()
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleImprimir = () => {
+    window.print()
   }
 
   const professionals = [
@@ -376,33 +392,44 @@ export default function AgendamentoPage() {
 
       {/* Confirmation Modal */}
       {mostrarConfirmacao && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95">
-            <div className="p-8">
-              <div className="flex items-center gap-4 mb-8">
-                <div className="w-12 h-12 rounded-full bg-pink-600 flex items-center justify-center shrink-0">
-                  <Check size={26} className="text-white" strokeWidth={3} />
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm print:bg-white print:p-0 print:block">
+          <div className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 print:shadow-none print:w-full print:max-w-none">
+            <div className="p-8 print:p-0">
+              <div className="flex items-center justify-between mb-8 print:hidden">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-pink-600 flex items-center justify-center shrink-0">
+                    <Check size={26} className="text-white" strokeWidth={3} />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-bold text-xl text-pink-800">Agendamento Confirmado!</h3>
+                    <p className="text-sm text-pink-600">Sua consulta foi registrada com sucesso.</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-heading font-bold text-xl text-pink-800">Agendamento Confirmado!</h3>
-                  <p className="text-sm text-pink-600">Sua consulta foi registrada. Protocolo: <span className="font-mono font-bold">{protocolo}</span></p>
-                </div>
+                <button
+                  onClick={handleImprimir}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 text-gray-600 font-bold text-xs hover:bg-gray-100 transition-all border border-gray-100"
+                >
+                  <Printer size={16} /> Imprimir Comprovante
+                </button>
               </div>
-              <div className="grid grid-cols-2 gap-8 mb-8">
-                <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Paciente</p>
-                  <p className="font-heading font-bold text-gray-800">{patientData.nomeCompleto}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Data e Hora</p>
-                  <p className="font-heading font-bold text-gray-800">{dataFormatada} às {formData.horario}</p>
-                </div>
+
+              {/* Comprovante Real */}
+              <div className="mb-8 overflow-y-auto max-h-[60vh] print:max-h-none print:overflow-visible custom-scrollbar pr-2">
+                <AppointmentReceipt 
+                  protocolo={protocolo}
+                  pacienteNome={pacienteNomeCompleto || patientData.nomeCompleto}
+                  pacienteCpf={cpf}
+                  unidade={profissionalSelecionado}
+                  data={dataFormatada}
+                  horario={formData.horario}
+                />
               </div>
+
               <button
                 onClick={handleFecharConfirmacaoEVoltar}
-                className="w-full py-4 rounded-xl bg-pink-600 text-white font-bold font-heading hover:bg-pink-800 transition-all"
+                className="w-full py-4 rounded-xl bg-pink-600 text-white font-bold font-heading hover:bg-pink-800 transition-all print:hidden"
               >
-                Concluir
+                Concluir e Voltar
               </button>
             </div>
           </div>

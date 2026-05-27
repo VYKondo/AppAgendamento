@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { RECEPTION_EMAILS } from './config/constants'
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
@@ -39,27 +40,39 @@ export async function proxy(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
+  const userEmail = user?.email?.toLowerCase()
+  const isReceptionist = userEmail && (RECEPTION_EMAILS as readonly string[]).includes(userEmail)
+  const pathname = request.nextUrl.pathname
 
-  // 👇 NOVA REGRA: Quais páginas devem ser trancadas? 
-  // No nosso novo modelo, APENAS a rota de consultas do médico exige login.
-  const isMedicoRoute = request.nextUrl.pathname.startsWith('/dashboard/consultas')
+  // 1. Definição de rotas que exigem autenticação obrigatória
+  const protectedRoutes = ['/dashboard/consultas', '/dashboard/recepcao', '/dashboard/horarios']
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route))
 
-  // Se NÃO tem usuário logado E tentou acessar uma página exclusiva de médico
-  if (!user && isMedicoRoute) {
-    const requestedPage = request.nextUrl.pathname
-    
-    // 👇 Mudamos a rota de redirecionamento de '/login' para a nossa porta secreta '/medico'
+  if (!user && isProtectedRoute) {
     const loginUrl = new URL('/medico', request.url)
-    loginUrl.searchParams.set('next', requestedPage)
-    
+    loginUrl.searchParams.set('next', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // IMPORTANTE: precisamos garantir que sempre retornamos a response no final
+  // 2. Restrições de Perfil: Recepção (Emails Especiais)
+  // Agora podem acessar: recepcao, agendamento e consultas.
+  if (isReceptionist) {
+    const allowedForReception = [
+      '/dashboard/recepcao',
+      '/dashboard/agendamento',
+      '/dashboard/consultas'
+    ]
+    const isAllowed = allowedForReception.some(route => pathname.startsWith(route))
+    
+    if (!isAllowed) {
+      // Redireciona para a home da recepção se tentar acessar áreas não autorizadas (ex: horários ou home do dashboard)
+      return NextResponse.redirect(new URL('/dashboard/recepcao', request.url))
+    }
+  }
+
   return response
 }
 
 export const config = {
-  // Mantemos o matcher vigiando o dashboard inteiro
   matcher: ['/dashboard/:path*'],
 }

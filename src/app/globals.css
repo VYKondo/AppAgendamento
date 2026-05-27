@@ -97,3 +97,28 @@
   html {
   scroll-behavior: smooth;
 }
+
+/* Print Styles */
+@media print {
+  header, footer, nav, button, .print\:hidden {
+    display: none !important;
+  }
+  
+  body {
+    background: none !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .fixed {
+    position: relative !important;
+    z-index: auto !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
