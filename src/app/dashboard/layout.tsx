@@ -133,11 +133,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <Ribbon className="text-pink-600 w-6 h-6" />
               </div>
               <span className="font-heading font-bold text-xl tracking-tight text-gray-800">
-<<<<<<< HEAD
-                Portal da Saúde
-=======
                 Câncer de Mama
->>>>>>> a046bd66e0b63460a576469a6134bfee79a6dbe3
               </span>
             </Link>
           )}

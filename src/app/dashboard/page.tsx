@@ -72,15 +72,9 @@ export default function DashboardHome() {
         <div>
           <strong className="font-heading block mb-0.5">Campanha Outubro Rosa Prorrogada</strong>
           <span style={{ color: C.pink600, fontWeight: 400 }}>
-<<<<<<< HEAD
-            Agendamentos para preventivos abertos.{' '}
-            <Link href="/dashboard/agendamento" className="underline underline-offset-2 font-semibold hover:opacity-80 transition-opacity">
-              Faça seu Agendamento Agora →
-=======
             Agendamentos para mamografia abertos para mulheres acima de 40 anos.{' '}
             <Link href="/dashboard/agendamento" className="underline underline-offset-2 font-semibold hover:opacity-80 transition-opacity">
               Agende agora →
->>>>>>> a046bd66e0b63460a576469a6134bfee79a6dbe3
             </Link>
           </span>
         </div>
@@ -117,11 +111,7 @@ export default function DashboardHome() {
             </h1>
 
             <p className="text-base leading-relaxed max-w-lg" style={{ color: C.gray500 }}>
-<<<<<<< HEAD
-              Portal integrado de saúde para agendamento de preventivos nos municípios: Grandes Rios, Flórida e Ribeirão — com agilidade e humanização para cada paciente.
-=======
-              Portal integrado de saúde para prevenção, diagnóstico e acompanhamento do câncer de mama — com agilidade e humanização para cada paciente.
->>>>>>> a046bd66e0b63460a576469a6134bfee79a6dbe3
+Portal integrado de saúde para prevenção, diagnóstico e acompanhamento do câncer de mama — com agilidade e humanização para cada paciente.
             </p>
 
             <div className="flex flex-wrap gap-3 pt-2">

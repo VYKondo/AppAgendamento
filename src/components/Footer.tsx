@@ -15,11 +15,7 @@ export default function Footer() {
               Fatec Biomedicina
             </h3>
             <p className="text-gray-500 text-sm md:max-w-md leading-relaxed">
-<<<<<<< HEAD
-              Iniciativa conjunta para o rastreio preventivo em parceria com o Governo Municipal.
-=======
               Iniciativa conjunta para o rastreio preventivo e combate ao câncer de mama em parceria com o Governo Municipal.
->>>>>>> a046bd66e0b63460a576469a6134bfee79a6dbe3
             </p>
             <p className="text-[11px] text-gray-400 font-medium pt-2">
               © {currentYear} — Todos os direitos reservados.
