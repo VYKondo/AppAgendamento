@@ -4952,7 +4952,7 @@ export default function DashboardHome() {
             </h1>
 
             <p className="text-base leading-relaxed max-w-lg" style={{ color: C.gray500 }}>
-              Portal integrado de saúde para prevenção, diagnóstico e acompanhamento do câncer de mama — com agilidade e humanização para cada paciente.
+              Portal integrado de saúde para agendamento de preventivos online — com agilidade e humanização para cada paciente.
             </p>
 
             <div className="flex flex-wrap gap-3 pt-2">
