@@ -17,7 +17,11 @@ export const metadata: Metadata = {
     default: "Fatec Biomedicina | Rastreio Preventivo",
     template: "%s | Fatec Biomedicina"
   },
+<<<<<<< HEAD
   description: "Portal de agendamento integrado para o rastreio preventivo em Grandes Rios, Ribeirão e Flórida.",
+=======
+  description: "Portal de agendamento integrado para o rastreio preventivo e combate ao câncer de mama em Grandes Rios, Ribeirão e Flórida.",
+>>>>>>> a046bd66e0b63460a576469a6134bfee79a6dbe3
   keywords: ["Câncer de Mama", "Rastreio Preventivo", "Mamografia", "Saúde Pública", "Fatec Biomedicina", "Grandes Rios", "SUS", "Agendamento Online"],
   authors: [{ name: "Fatec Biomedicina" }],
   creator: "Fatec Biomedicina",
@@ -33,7 +37,11 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Fatec Biomedicina | Rastreio Preventivo",
+<<<<<<< HEAD
     description: "Portal integrado para o agendamento de preventivos. Agende seus preventivos online.",
+=======
+    description: "Portal integrado para o combate ao câncer de mama. Agende sua mamografia e exames preventivos online.",
+>>>>>>> a046bd66e0b63460a576469a6134bfee79a6dbe3
     url: 'https://portaldasaude.vercel.app',
     siteName: 'Fatec Saúde',
     locale: 'pt_BR',
