@@ -34,7 +34,7 @@ export default function AppointmentReceipt({
         </div>
         <h2 className="font-heading font-extrabold text-2xl text-gray-800 uppercase tracking-tight">Comprovante de Agendamento</h2>
         <p className="text-pink-600 font-bold font-mono mt-1 text-lg">{protocolo}</p>
-        <p className="text-xs text-gray-400 mt-2 uppercase tracking-widest font-bold">Portal da Saúde — Prevenção Câncer de Mama</p>
+        <p className="text-xs text-gray-400 mt-2 uppercase tracking-widest font-bold">Portal da Saúde — Agendamento de Preventivos</p>
       </div>
 
       {/* Conteúdo Central */}

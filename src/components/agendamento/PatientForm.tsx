@@ -8,8 +8,6 @@ interface PatientFormProps {
     cns: string
     dataNascimento: string
     nacionalidade: string
-    identidadeGenero: string
-    orientacaoSexual: string
     nomeMae: string
     motherNotDeclared: boolean
     nomePai: string
@@ -107,27 +105,6 @@ export default function PatientForm({
         </div>
       </div>
 
-      {/* Identidade e Orientação */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-        <div>
-          <label htmlFor="identidadeGenero" className="block text-xs font-bold mb-1.5 text-gray-600 uppercase tracking-tight">Identidade de Gênero</label>
-          <input 
-            id="identidadeGenero"
-            type="text" value={data.identidadeGenero} onChange={e => onChange('identidadeGenero', e.target.value)}
-            placeholder="Ex: Mulher Cis, Homem Trans..."
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl text-base outline-none focus:border-pink-400 focus:ring-4 focus:ring-pink-50 transition-all font-medium"
-          />
-        </div>
-        <div>
-          <label htmlFor="orientacaoSexual" className="block text-xs font-bold mb-1.5 text-gray-600 uppercase tracking-tight">Orientação Sexual</label>
-          <input 
-            id="orientacaoSexual"
-            type="text" value={data.orientacaoSexual} onChange={e => onChange('orientacaoSexual', e.target.value)}
-            placeholder="Ex: Heterossexual, Lésbica..."
-            className="w-full px-4 py-3 border border-gray-200 rounded-xl text-base outline-none focus:border-pink-400 focus:ring-4 focus:ring-pink-50 transition-all font-medium"
-          />
-        </div>
-      </div>
 
       <p className="text-xs font-bold tracking-widest uppercase mb-3 text-gray-400">Filiação</p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">

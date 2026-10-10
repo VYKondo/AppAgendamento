@@ -43,8 +43,6 @@ export default function AgendamentoPage() {
     cns: '',
     dataNascimento: '',
     nacionalidade: '',
-    identidadeGenero: '',
-    orientacaoSexual: '',
     nomeMae: '',
     motherNotDeclared: false,
     nomePai: '',
@@ -184,8 +182,6 @@ export default function AgendamentoPage() {
           cns: sanitizeNumeric(patientData.cns),
           data_nascimento: patientData.dataNascimento,
           telefone: sanitizeNumeric(patientData.telefone),
-          identidade_genero: sanitizeString(patientData.identidadeGenero),
-          orientacao_sexual: sanitizeString(patientData.orientacaoSexual),
           nacionalidade: sanitizeString(patientData.nacionalidade),
           nome_mae: patientData.motherNotDeclared ? 'Não declarado' : sanitizeString(patientData.nomeMae),
           nome_pai: patientData.fatherNotDeclared ? 'Não declarado' : sanitizeString(patientData.nomePai),
@@ -252,7 +248,7 @@ export default function AgendamentoPage() {
     setPacienteNomeCompleto('')
     setPatientData({
       nomeCompleto: '', nomeSocial: '', cns: '', dataNascimento: '', nacionalidade: '',
-      identidadeGenero: '', orientacaoSexual: '', nomeMae: '', motherNotDeclared: false,
+      nomeMae: '', motherNotDeclared: false,
       nomePai: '', fatherNotDeclared: false, telefone: '', cep: '', rua: '',
       numero: '', complemento: '', bairro: '', cidade: '', uf: ''
     })
